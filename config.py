@@ -31,6 +31,7 @@ class Config:
         self.CONFIG["last_name"] = ""
         self.CONFIG["last_gender"] = "保密"
         self.CONFIG["last_birthday"] = ""
+        self.CONFIG["last_avatar"] = ""
 
     def save(self):
         """将当前内存中的实例属性写入磁盘"""
