@@ -9,7 +9,8 @@ class Config:
             "last_user": "",        # 最后登录手机号
             "last_name": "",        # 最后用户昵称
             "last_gender": "保密",  # 最后用户性别
-            "last_birthday": ""
+            "last_birthday": "",    # 最后用户生日
+            "last_avatar": ""       # 最后用户头像
         }
 
         user_data = FileReader.read_json(self.FILE)
