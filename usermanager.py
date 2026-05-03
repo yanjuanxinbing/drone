@@ -9,9 +9,7 @@ class UserManager:
 
     def _hash_password(self, password: str) -> str:
         """将明文密码转换为 SHA-256 哈希字符串"""
-        # 使用 sha256 算法
         sha256 = hashlib.sha256()
-        # 哈希计算需要 bytes 类型，所以要 encode
         sha256.update(password.encode('utf-8'))
         return sha256.hexdigest()
 
@@ -21,7 +19,7 @@ class UserManager:
     def contains(self, phone_number: str) -> bool: 
         return phone_number in self.users
 
-    def add(self, phone_number, nick_name, password, gender="保密", birthday=""):
+    def add(self, phone_number, nick_name, password, gender="保密", birthday="", avatar=""):
         """添加用户时，存储哈希后的密码"""
         hashed_pwd = self._hash_password(password)
         
@@ -29,7 +27,8 @@ class UserManager:
             "nick_name": nick_name,
             "password": hashed_pwd,
             "gender": gender,
-            "birthday": birthday
+            "birthday": birthday,
+            "avatar": avatar
         }
         self.save()
 
