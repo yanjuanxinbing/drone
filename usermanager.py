@@ -15,17 +15,40 @@ class UserManager:
         sha256.update(password.encode('utf-8'))
         return sha256.hexdigest()
 
+    def get(self, phone_number) -> dict:
+        return self.users.get(phone_number)
+
     def contains(self, phone_number: str) -> bool: 
         return phone_number in self.users
-    
-    def add(self, phone_number: str, nick_name: str, password: str):
+
+    def add(self, phone_number, nick_name, password, gender="保密", birthday=""):
         """添加用户时，存储哈希后的密码"""
         hashed_pwd = self._hash_password(password)
         
         self.users[phone_number] = {
             "nick_name": nick_name,
-            "password": hashed_pwd
+            "password": hashed_pwd,
+            "gender": gender,
+            "birthday": birthday
         }
+        self.save()
+
+    def update_value(self, phone_number, nick_name, gender, birthday):
+        """更新除密码外的值"""
+        self.users[phone_number]["nick_name"] = nick_name
+        self.users[phone_number]["gender"] = gender
+        self.users[phone_number]["birthday"] = birthday
+
+        self.save()
+
+    def update_key(self, phone_number_old, phone_number_new) -> bool:
+        """更新手机号码"""
+        if self.contains(phone_number_new):
+            return False
+
+        user = self.get(phone_number_old).copy()
+        self.users.pop(phone_number_old)
+        self.users[phone_number_new] = user
         self.save()
 
     def verify_login(self, phone_number: str, input_password: str) -> bool:

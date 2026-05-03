@@ -38,6 +38,10 @@ class FileReader:
         except Exception as e:
             print(f"FileReader: JSON 解析失败 - {path} ({e})")
             return {}
+        
+    @staticmethod
+    def read_img(filename: str, subdir: str = "img"):
+        path = f"{ROOT}/{subdir}/{filename}"
 
 class FileWriter:
     @staticmethod

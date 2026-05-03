@@ -1,6 +1,7 @@
 import re
 import sys
 import flet as ft
+import datetime
 from config import Config
 from usermanager import UserManager
 from dronemanager import DroneManager
@@ -10,7 +11,45 @@ class ViewBuilder:
     """视图构建器 - 只负责生成 UI"""
     def __init__(self, app: App):
         self.app = app
-    
+
+    def goto(self, name, drone_id=None):
+        """通用页面跳转"""
+        self.app.page.controls.clear()
+        
+        if name == "home":
+            self.app.page.navigation_bar.selected_index = 0
+            view = self.build_home()
+        elif name == "orders":
+            self.app.page.navigation_bar.selected_index = 1
+            view = self.build_orders()
+        elif name == "profile":
+            self.app.page.navigation_bar.selected_index = 2
+            view = self.build_profile()
+        elif name == "login":
+            view = self.build_login()
+        elif name == "register":
+            view = self.build_register()
+        elif name == "forget":
+            print("忘记密码")
+        elif name == "drone":
+            view = self.build_drone_detail(drone_id)
+        elif name == "settings":
+            view = self.build_settings()
+        elif name == "personal_info":
+            view = self.build_personal_info()
+
+        self.app.page.add(view)
+        self.app.page.update()
+
+    def show_snackbar(self, text, color):
+        snackbar = ft.SnackBar(
+            content=ft.Text(text), 
+            bgcolor=color
+            )
+        self.app.page.overlay.append(snackbar)
+        snackbar.open = True
+        self.app.page.update()
+
     def build_home(self):
         """构建首页"""
         header = ft.Container(
@@ -93,19 +132,232 @@ class ViewBuilder:
             expand=True,
         )
 
+    def build_personal_info(self):
+        """个人信息编辑页面"""
+        # 1. 获取现有配置数据
+        username = self.app.config.get("last_name")
+        gender_val = self.app.config.get("last_gender")
+        birthday_val = self.app.config.get("last_birthday")
+
+        # --- UI 控件定义 ---
+        # 昵称
+        nickname_field = ft.TextField(
+            label="昵称", value=username, border_radius=10, width=350
+        )
+
+        # 性别下拉选择
+        gender_dropdown = ft.Dropdown(
+            label="性别",
+            value=gender_val,
+            options=[
+                ft.dropdown.Option("男"),
+                ft.dropdown.Option("女"),
+                ft.dropdown.Option("保密"),
+            ],
+            border_radius=10,
+            width=350,
+        )
+
+        # 出生日期显示（设为只读，通过弹窗修改）
+        birthday_field = ft.TextField(
+                label="出生日期",
+                value=birthday_val,
+                read_only=True,
+                border_radius=10,
+                width=310,
+                hint_text="点击图标选择日期",
+            )
+
+        # --- 交互事件处理 ---
+        # 日期选择器逻辑
+        def on_date_change(e):
+            if e.control.value:
+                picked_date: datetime.datetime = e.control.value
+                local_date = picked_date.astimezone(None)
+                selected_date_str = local_date.strftime("%Y-%m-%d")
+                birthday_field.value = selected_date_str
+                birthday_field.update()
+
+        date_picker = ft.DatePicker(
+            value = datetime.datetime.strptime(birthday_val, "%Y-%m-%d") if birthday_val else None,
+            on_change=on_date_change,
+            first_date=datetime.datetime(1900, 1, 1),
+            last_date=datetime.datetime.now(),
+        )
+        # 将选择器加入页面 overlay
+        self.app.page.overlay.append(date_picker)
+
+        def on_save_click():
+            new_nickname = nickname_field.value.strip()
+            if not new_nickname:
+                self.show_snackbar("昵称不能为空", ft.Colors.RED_400)
+                return
+
+            usermanager = UserManager()
+
+            # 保存所有信息到配置
+            self.app.config.set("last_name", new_nickname)
+            self.app.config.set("last_gender", gender_dropdown.value)
+            self.app.config.set("last_birthday", birthday_field.value)
+            
+            usermanager.update_value(self.app.config.get("last_user"), new_nickname, gender_dropdown.value, birthday_field.value)
+
+            self.show_snackbar("个人信息已保存", ft.Colors.GREEN_400)
+
+        def on_change_avatar(e):
+            self.show_snackbar("头像更换功能开发中", ft.Colors.BLUE_400)
+
+        # --- 页面布局 ---
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("个人信息", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            # 主要内容
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(height=20),
+                    # 头像区域
+                    ft.Column([
+                        ft.Container(content=ft.Text("👤", size=80), width=120, height=120, 
+                                    bgcolor=ft.Colors.BLUE_100, border_radius=60, alignment=ft.Alignment.CENTER),
+                        ft.TextButton("更换头像", icon=ft.Icons.CAMERA_ALT_OUTLINED, on_click=on_change_avatar),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+
+                    # 表单区域
+                    ft.Column([
+                        nickname_field,
+                        gender_dropdown,
+                        # 日期输入框配合选择图标
+                        ft.Row([
+                            birthday_field,
+                            ft.IconButton(
+                                icon=ft.Icons.CALENDAR_MONTH,
+                                on_click=lambda: self.app.page.show_dialog(date_picker),
+                                icon_color=ft.Colors.BLUE,
+                            )
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
+                    ], spacing=15, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+
+                    ft.Container(height=30),
+                    # 保存按钮
+                    ft.Button(
+                        "保存修改", width=350, height=55, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE,
+                        on_click=on_save_click,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+                    ),
+                ], scroll=ft.ScrollMode.AUTO, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                expand=True,
+                padding=20,
+            )
+        ], expand=True)
+
+    def build_settings(self):
+        """构建设置页"""
+        return ft.Column([
+            # 顶部导航栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda: self.goto("profile")),
+                    ft.Text("设置", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            # 设置内容
+            ft.Container(
+                content=ft.Column([
+                    # ==================== 账户相关 ====================
+                    ft.Container(
+                        content=ft.Text("账户", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=20, top=20, bottom=10)
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.PERSON_OUTLINE),
+                        title=ft.Text("个人信息"),
+                        subtitle=ft.Text("修改昵称、头像、联系方式"),
+                        on_click=lambda: self.goto("personal_info")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.LOCK_OUTLINE),
+                        title=ft.Text("修改密码"),
+                        subtitle=ft.Text("定期修改以保护账号安全"),
+                        on_click=lambda: print("修改密码")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.PAYMENTS_OUTLINED),
+                        title=ft.Text("支付方式"),
+                        subtitle=ft.Text("银行卡、支付宝、微信"),
+                        on_click=lambda: print("支付方式管理")
+                    ),
+
+                    # ==================== 租赁服务 ====================
+                    ft.Container(
+                        content=ft.Text("租赁偏好", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=20, top=25, bottom=10)
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.LOCATION_ON_OUTLINED),
+                        title=ft.Text("常用地址"),
+                        subtitle=ft.Text("取机/还机地址管理"),
+                        on_click=lambda: print("地址管理")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED),
+                        title=ft.Text("租赁通知"),
+                        subtitle=ft.Text("到期提醒、订单状态"),
+                        trailing=ft.Switch(value=True),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.HISTORY),
+                        title=ft.Text("租赁记录"),
+                        subtitle=ft.Text("查看历史租赁订单"),
+                        on_click=lambda: self.goto("orders")  # 直接跳到订单页
+                    ),
+
+                    # ==================== 其他设置 ====================
+                    ft.Container(
+                        content=ft.Text("其他", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=20, top=25, bottom=10)
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.CACHED),
+                        title=ft.Text("清除缓存"),
+                        subtitle=ft.Text("释放空间"),
+                        on_click=lambda: self.show_snackbar("缓存已清除", ft.Colors.GREEN_400)
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.PRIVACY_TIP_OUTLINED),
+                        title=ft.Text("隐私设置"),
+                        subtitle=ft.Text("数据使用与权限"),
+                        on_click=lambda: print("隐私设置")
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.HELP_OUTLINE),
+                        title=ft.Text("帮助中心"),
+                        subtitle=ft.Text("常见问题与客服"),
+                        on_click=lambda: print("帮助中心")
+                    ),
+                ], scroll=ft.ScrollMode.AUTO),
+                expand=True,
+            )
+        ], expand=True)
+
     def build_profile(self):
         """构建我的页面"""
         username = self.app.config.get("last_name") or "游客"
         is_logged_in = bool(self.app.config.get("last_name"))
 
-        def on_settings_click():
-            #TODO
-            print("设置界面")
-
         def on_logout_click():
             """退出登录"""
-            self.app.config.set("last_user", "")
-            self.app.config.set("last_name", "")
+            self.app.config.logout()
             self.goto("profile")
         
         user_card = ft.Container(
@@ -128,7 +380,7 @@ class ViewBuilder:
                 ], spacing=2, expand=True),
                 ft.IconButton(
                     icon=ft.Icons.SETTINGS,
-                    on_click=lambda: on_settings_click(),
+                    on_click=lambda: self.goto("settings"),
                 ),
             ]),
             bgcolor=ft.Colors.BLUE_50,
@@ -178,31 +430,6 @@ class ViewBuilder:
             logout_section,
         ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
 
-    def goto(self, name, drone_id=None):
-        """通用页面跳转"""
-        self.app.page.controls.clear()
-        
-        if name == "home":
-            self.app.page.navigation_bar.selected_index = 0
-            view = self.build_home()
-        elif name == "orders":
-            self.app.page.navigation_bar.selected_index = 1
-            view = self.build_orders()
-        elif name == "profile":
-            self.app.page.navigation_bar.selected_index = 2
-            view = self.build_profile()
-        elif name == "login":
-            view = self.build_login()
-        elif name == "register":
-            view = self.build_register()
-        elif name == "forget":
-            print("忘记密码")
-        elif name == "drone":
-            view = self.build_drone_detail(drone_id)
-
-        self.app.page.add(view)
-        self.app.page.update()
-
     def build_login(self):
         """构建登录页面"""
         phone_number_field = ft.TextField(
@@ -225,21 +452,12 @@ class ViewBuilder:
             phone_number = phone_number_field.value
             password = password_field.value
             
-            def warn(text: str):
-                snackbar = ft.SnackBar(
-                    content=ft.Text(text),
-                    bgcolor=ft.Colors.RED_400,
-                )
-                self.app.page.overlay.append(snackbar)
-                snackbar.open = True
-                self.app.page.update()
-            
             if not phone_number:
-                warn("请输入手机号")
+                self.show_snackbar("请输入手机号", ft.Colors.RED_400)
                 return
             
             if not password:
-                warn("请输入密码")
+                self.show_snackbar("请输入密码", ft.Colors.RED_400)
                 return
             
             user_manager = UserManager()
@@ -247,9 +465,11 @@ class ViewBuilder:
             # 登录成功
             if user_manager.verify_login(phone_number, password):
                 self.app.config.set("last_user", phone_number)
-                self.app.config.set("last_name", user_manager[phone_number]["nick_name"])
+                self.app.config.set("last_name", user_manager.users[phone_number]["nick_name"])
+                self.app.config.set("last_gender", user_manager.users[phone_number]["gender"])
+                self.app.config.set("last_birthday", user_manager.users[phone_number]["birthday"])
             else:
-                warn("手机号或密码错误")
+                self.show_snackbar("手机号或密码错误", ft.Colors.RED_400)
                 return
             
             # 返回"我的"页面
@@ -431,46 +651,37 @@ class ViewBuilder:
 
             user_manager = UserManager()
 
-            def warn(text: str):
-                snackbar = ft.SnackBar(
-                    content=ft.Text(text),
-                    bgcolor=ft.Colors.RED_400,
-                )
-                self.app.page.overlay.append(snackbar)
-                snackbar.open = True
-                self.app.page.update()
-
             # 验证手机号
             if not phone_number:
-                warn("请输入手机号")
+                self.show_snackbar("请输入手机号", ft.Colors.RED_400)
                 return
 
             phone_pattern = r"^1[3-9]\d{9}$"
             if not re.match(phone_pattern, phone_number):
-                warn("请输入正确的11位手机号码")
+                self.show_snackbar("请输入正确的11位手机号码", ft.Colors.RED_400)
                 return
             
             if user_manager.contains(phone_number):
-                warn("手机号已注册，请登录")
+                self.show_snackbar("手机号已注册，请登录", ft.Colors.RED_400)
                 return
 
             # 验证密码
             if not password:
-                warn("请输入密码")
+                self.show_snackbar("请输入密码", ft.Colors.RED_400)
                 return
             
             if len(password) < 6:
-                warn("密码至少需要6位")
+                self.show_snackbar("密码至少需要6位", ft.Colors.RED_400)
                 return
             
             # 验证确认密码
             if password != confirm_password:
-                warn("两次输入的密码不一致")
+                self.show_snackbar("两次输入的密码不一致", ft.Colors.RED_400)
                 return
             
             # 检查协议勾选
             if not agree_checkbox.value:
-                warn("请先阅读并同意用户协议")
+                self.show_snackbar("请先阅读并同意用户协议", ft.Colors.RED_400)
                 return
             
             # 注册成功
@@ -478,6 +689,8 @@ class ViewBuilder:
 
             self.app.config.set("last_user", phone_number)
             self.app.config.set("last_name", f"用户{phone_number}")
+            self.app.config.set("last_gender", "保密")
+            self.app.config.set("last_birthday", "")
 
             snackbar = ft.SnackBar(
                 content=ft.Text(f"注册成功！欢迎 用户{phone_number}"),
