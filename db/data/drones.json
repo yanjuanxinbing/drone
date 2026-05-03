@@ -1,0 +1,92 @@
+{
+  "drones": [
+    {
+      "id": "dji_air_3s",
+      "name": "DJI Air 3S",
+      "price": 299,
+      "original_price": 399,
+      "tag": "热门",
+      "specs": "46min续航/4K",
+      "category": "航拍摄影",
+      "description": "DJI Air 3S 是一款轻便型航拍无人机，配备双摄像头系统，支持4K视频录制，续航时间长达46分钟。适合旅行拍摄和日常创作。",
+      "features": [
+        "46分钟超长续航",
+        "4K/60fps 视频录制",
+        "全向避障系统",
+        "10公里图传距离",
+        "智能跟随模式"
+      ],
+      "images": [
+        "🚁"
+      ],
+      "stock": 50,
+      "sales": 1203
+    },
+    {
+      "id": "mavic_3_pro",
+      "name": "Mavic 3 Pro",
+      "price": 499,
+      "original_price": 699,
+      "tag": "专业",
+      "specs": "哈苏镜头/三摄",
+      "category": "航拍摄影",
+      "description": "Mavic 3 Pro 配备哈苏相机和双长焦镜头，提供专业级影像质量。三摄系统让你在不同场景下都能拍出完美画面。",
+      "features": [
+        "哈苏 4/3 CMOS 主摄",
+        "双长焦镜头系统",
+        "43分钟续航",
+        "15公里图传",
+        "Apple ProRes 编码"
+      ],
+      "images": [
+        "🚁"
+      ],
+      "stock": 30,
+      "sales": 856
+    },
+    {
+      "id": "autel_evo_ii",
+      "name": "Autel EVO II",
+      "price": 699,
+      "original_price": 899,
+      "tag": "工业",
+      "specs": "6K超清/测绘",
+      "category": "工业巡检",
+      "description": "Autel EVO II 专为行业应用设计，支持6K超清录制和精准测绘功能。防风防雨设计，适合恶劣环境作业。",
+      "features": [
+        "6K超高清视频",
+        "12向避障系统",
+        "40分钟续航",
+        "RTK高精度定位",
+        "IP43防护等级"
+      ],
+      "images": [
+        "🚁"
+      ],
+      "stock": 15,
+      "sales": 234
+    },
+    {
+      "id": "dobby_pocket",
+      "name": "Dobby Pocket",
+      "price": 99,
+      "original_price": 149,
+      "tag": "入门",
+      "specs": "自拍/人脸跟踪",
+      "category": "自拍娱乐",
+      "description": "Dobby Pocket 是一款口袋大小的自拍无人机，支持人脸识别和智能跟随。轻便易携带，随时随地记录精彩瞬间。",
+      "features": [
+        "口袋便携设计",
+        "人脸识别跟踪",
+        "1080P高清录制",
+        "9分钟续航",
+        "手势控制拍照"
+      ],
+      "images": [
+        "🚁"
+      ],
+      "stock": 100,
+      "sales": 3421
+    }
+  ]
+}

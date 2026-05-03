@@ -3,92 +3,13 @@ import sys
 import flet as ft
 from config import Config
 from usermanager import UserManager
+from dronemanager import DroneManager
 from file import FileReader, FileWriter
-
-class EventHandler:
-    """事件处理器 - 持有 App 实例引用"""
-    def __init__(self, app: App):
-        self.app = app
-    
-    # --- 导航事件 ---
-    def on_nav_change(self, e):
-        """底部导航栏切换"""
-        index = e.control.selected_index
-        self.app.page.controls.clear()
-        
-        if index == 0:
-            view = self.app.view_builder.build_home()
-        elif index == 1:
-            view = self.app.view_builder.build_orders()
-        elif index == 2:
-            view = self.app.view_builder.build_profile()
-        
-        self.app.page.add(view)
-        self.app.page.update()
-    
-    # --- 首页事件 ---
-    def on_search(self, e):
-        print(f"搜索: {e.control.value}")
-    
-    def on_category_click(self, name):
-        print(f"分类: {name}")
-    
-    def on_drone_click(self, name):
-        print(f"无人机: {name}")
-    
-    # --- 我的页面事件 ---
-    def on_menu_click(self, label):
-        print(f"点击: {label}")
-    
-    def on_settings_click(self, title):
-        print(f"设置: {title}")
-    
-    def on_login_click(self):
-        """跳转到登录页面"""
-        self.app.page.controls.clear()
-        view = self.app.view_builder.build_login()
-        self.app.page.add(view)
-        self.app.page.update()
-    
-    def on_register_click(self):
-        """跳转到注册页面"""
-        self.app.page.controls.clear()
-        view = self.app.view_builder.build_register()
-        self.app.page.add(view)
-        self.app.page.update()
-    
-    def on_forget_click(self):
-        #TODO
-        pass
-
-    def on_nav_change_to_profile(self):
-        """直接跳转到我的页面（不通过导航栏）"""
-        self.app.page.controls.clear()
-        # 更新导航栏选中状态
-        self.app.page.navigation_bar.selected_index = 2
-        view = self.app.view_builder.build_profile()
-        self.app.page.add(view)
-        self.app.page.update()
-    
-    def on_logout_click(self):
-        """退出登录"""
-        self.app.config.set("last_user", "")
-        self.app.config.set("last_name", "")
-        print("已退出登录")
-        self._refresh_profile()
-    
-    def _refresh_profile(self):
-        """刷新我的页面"""
-        self.app.page.controls.clear()
-        view = self.app.view_builder.build_profile()
-        self.app.page.add(view)
-        self.app.page.update()
 
 class ViewBuilder:
     """视图构建器 - 只负责生成 UI"""
     def __init__(self, app: App):
         self.app = app
-        self.handler = app.event_handler
     
     def build_home(self):
         """构建首页"""
@@ -100,13 +21,17 @@ class ViewBuilder:
             border_radius=ft.BorderRadius.only(bottom_left=30, bottom_right=30),
         )
 
+        def on_search(e):
+            #TODO
+            print(f"搜索: {e.control.value}")
+
         search_bar = ft.Container(
             content=ft.TextField(
                 prefix_icon=ft.Icons.SEARCH,
                 hint_text="搜索无人机型号...",
                 border_radius=15,
                 filled=True,
-                on_submit=self.handler.on_search,
+                on_submit=on_search,
                 bgcolor=ft.Colors.WHITE,
             ),
             padding=ft.Padding.symmetric(horizontal=20),
@@ -124,6 +49,9 @@ class ViewBuilder:
             alignment=ft.MainAxisAlignment.CENTER,
         )
 
+        # 从数据文件获取热门无人机
+        hot_drones = self.app.drone_manager.get_hot(limit=4)
+
         drone_grid = ft.GridView(
             expand=True,
             runs_count=2,
@@ -132,10 +60,13 @@ class ViewBuilder:
             spacing=15,
             run_spacing=15,
             controls=[
-                self._drone_card("DJI Air 3S", "299", "热门", "46min续航/4K"),
-                self._drone_card("Mavic 3 Pro", "499", "专业", "哈苏镜头/三摄"),
-                self._drone_card("Autel EVO II", "699", "工业", "6K超清/测绘"),
-                self._drone_card("Dobby Pocket", "99", "入门", "自拍/人脸跟踪"),
+                self._drone_card(
+                    drone_id=drone["id"],
+                    name=drone["name"],
+                    price=str(drone["price"]),
+                    tag=drone["tag"],
+                    specs=drone["specs"]
+                ) for drone in hot_drones
             ],
         )
 
@@ -166,6 +97,16 @@ class ViewBuilder:
         """构建我的页面"""
         username = self.app.config.get("last_name") or "游客"
         is_logged_in = bool(self.app.config.get("last_name"))
+
+        def on_settings_click():
+            #TODO
+            print("设置界面")
+
+        def on_logout_click():
+            """退出登录"""
+            self.app.config.set("last_user", "")
+            self.app.config.set("last_name", "")
+            self.goto("profile")
         
         user_card = ft.Container(
             content=ft.Row([
@@ -187,13 +128,13 @@ class ViewBuilder:
                 ], spacing=2, expand=True),
                 ft.IconButton(
                     icon=ft.Icons.SETTINGS,
-                    on_click=lambda _: self.handler.on_settings_click("设置"),
+                    on_click=lambda: on_settings_click(),
                 ),
             ]),
             bgcolor=ft.Colors.BLUE_50,
             padding=20,
             border_radius=15,
-            on_click=lambda _: self.handler.on_login_click() if not is_logged_in else None,
+            on_click=lambda: self.goto("login") if not is_logged_in else None,
         )
         
         menu_items = ft.Container(
@@ -222,7 +163,7 @@ class ViewBuilder:
                 content=ft.TextButton(
                     "退出登录",
                     icon=ft.Icons.LOGOUT,
-                    on_click=lambda _: self.handler.on_logout_click(),
+                    on_click=lambda: on_logout_click(),
                     style=ft.ButtonStyle(color=ft.Colors.RED_400),
                 ),
                 alignment=ft.Alignment.CENTER,
@@ -236,6 +177,31 @@ class ViewBuilder:
             settings_section,
             logout_section,
         ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
+
+    def goto(self, name, drone_id=None):
+        """通用页面跳转"""
+        self.app.page.controls.clear()
+        
+        if name == "home":
+            self.app.page.navigation_bar.selected_index = 0
+            view = self.build_home()
+        elif name == "orders":
+            self.app.page.navigation_bar.selected_index = 1
+            view = self.build_orders()
+        elif name == "profile":
+            self.app.page.navigation_bar.selected_index = 2
+            view = self.build_profile()
+        elif name == "login":
+            view = self.build_login()
+        elif name == "register":
+            view = self.build_register()
+        elif name == "forget":
+            print("忘记密码")
+        elif name == "drone":
+            view = self.build_drone_detail(drone_id)
+
+        self.app.page.add(view)
+        self.app.page.update()
 
     def build_login(self):
         """构建登录页面"""
@@ -255,7 +221,7 @@ class ViewBuilder:
             border_radius=10,
         )
         
-        def on_login_submit(e):
+        def on_login_submit():
             phone_number = phone_number_field.value
             password = password_field.value
             
@@ -281,17 +247,14 @@ class ViewBuilder:
             # 登录成功
             if user_manager.verify_login(phone_number, password):
                 self.app.config.set("last_user", phone_number)
+                self.app.config.set("last_name", user_manager[phone_number]["nick_name"])
             else:
                 warn("手机号或密码错误")
                 return
             
             # 返回"我的"页面
-            self.handler.on_nav_change_to_profile()
-        
-        def on_back(e):
-            # 返回"我的"页面
-            self.handler.on_nav_change_to_profile()
-        
+            self.goto("profile")
+
         return ft.Container(
             content=ft.Column([
                 # 顶部返回按钮
@@ -299,7 +262,7 @@ class ViewBuilder:
                     content=ft.Row([
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
-                            on_click=on_back,
+                            on_click=lambda: self.goto("profile"),
                         ),
                         ft.Text("登录", size=20, weight="bold"),
                     ]),
@@ -348,7 +311,7 @@ class ViewBuilder:
                         ft.Container(
                             content=ft.TextButton(
                                 "忘记密码？",
-                                on_click=lambda _: self.handler.on_forget_click(),
+                                on_click=lambda: self.goto("forget"),
                             ),
                             alignment=ft.Alignment.CENTER_RIGHT,
                         ),
@@ -375,7 +338,7 @@ class ViewBuilder:
                             ft.Text("还没有账号？", size=14, color=ft.Colors.GREY_600),
                             ft.TextButton(
                                 "立即注册",
-                                on_click=lambda _: self.handler.on_register_click(),
+                                on_click=lambda: self.goto("register"),
                             ),
                         ], alignment=ft.MainAxisAlignment.CENTER),
                         
@@ -446,7 +409,7 @@ class ViewBuilder:
             ft.Text("我已阅读并同意", size=13, color=ft.Colors.GREY_700),
             ft.TextButton(
                 "《用户协议》",
-                on_click=lambda _: show_document("用户协议", "user_agreement_text.txt"),
+                on_click=lambda: show_document("用户协议", "user_agreement_text.txt"),
                 style=ft.ButtonStyle(
                     padding=0,
                 ),
@@ -454,14 +417,14 @@ class ViewBuilder:
             ft.Text("和", size=13, color=ft.Colors.GREY_700),
             ft.TextButton(
                 "《隐私政策》",
-                on_click=lambda _: show_document("隐私政策", "privacy_policy_text.txt"),
+                on_click=lambda: show_document("隐私政策", "privacy_policy_text.txt"),
                 style=ft.ButtonStyle(
                     padding=0,
                 ),
             ),
         ], spacing=0, wrap=True)
         
-        def on_register_submit(e):
+        def on_register_submit():
             phone_number = phone_number_field.value
             password = password_field.value
             confirm_password = confirm_password_field.value
@@ -511,9 +474,11 @@ class ViewBuilder:
                 return
             
             # 注册成功
+            user_manager.add(phone_number, f"用户{phone_number}", password)
+
             self.app.config.set("last_user", phone_number)
             self.app.config.set("last_name", f"用户{phone_number}")
-            
+
             snackbar = ft.SnackBar(
                 content=ft.Text(f"注册成功！欢迎 用户{phone_number}"),
                 bgcolor=ft.Colors.GREEN_400,
@@ -522,11 +487,7 @@ class ViewBuilder:
             snackbar.open = True
             self.app.page.update()
 
-            user_manager.add(phone_number, f"用户{phone_number}", password)
-            self.handler.on_nav_change_to_profile()
-        
-        def on_back(e):
-            self.handler.on_login_click()
+            self.goto("profile")
         
         return ft.Container(
             content=ft.Column([
@@ -535,7 +496,7 @@ class ViewBuilder:
                     content=ft.Row([
                         ft.IconButton(
                             icon=ft.Icons.ARROW_BACK,
-                            on_click=on_back,
+                            on_click=lambda: self.goto("login"),
                         ),
                         ft.Text("注册", size=20, weight="bold"),
                     ]),
@@ -607,7 +568,7 @@ class ViewBuilder:
                             ft.Text("已有账号？", size=14, color=ft.Colors.GREY_600),
                             ft.TextButton(
                                 "立即登录",
-                                on_click=on_back,
+                                on_click=lambda: self.goto("login"),
                             ),
                         ], alignment=ft.MainAxisAlignment.CENTER),
                         
@@ -620,21 +581,228 @@ class ViewBuilder:
             bgcolor=ft.Colors.WHITE,
         )
 
+    def build_drone_detail(self, drone_id: str):
+        """构建无人机详情页"""
+        drone = self.app.drone_manager.get_by_id(drone_id)
+        
+        if not drone:
+            # 如果找不到无人机，显示错误页面
+            return ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color=ft.Colors.GREY_400),
+                    ft.Text("无人机不存在", size=20, weight="bold"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
+                expand=True,
+            )
+
+        def on_add_to_cart(e):
+            """加入购物车"""
+            snackbar = ft.SnackBar(
+                content=ft.Text(f"已将 {drone['name']} 加入购物车"),
+                bgcolor=ft.Colors.GREEN_400,
+            )
+            self.app.page.overlay.append(snackbar)
+            snackbar.open = True
+            self.app.page.update()
+        
+        def on_buy_now(e):
+            """立即购买"""
+            snackbar = ft.SnackBar(
+                content=ft.Text("跳转到支付页面（功能开发中）"),
+                bgcolor=ft.Colors.BLUE_400,
+            )
+            self.app.page.overlay.append(snackbar)
+            snackbar.open = True
+            self.app.page.update()
+        
+        # 顶部导航栏
+        top_bar = ft.Container(
+            content=ft.Row([
+                ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda: self.goto("home"),
+                ),
+                ft.Text("商品详情", size=18, weight="bold", expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.SHOPPING_CART_OUTLINED,
+                    on_click=lambda: print("打开购物车"),
+                ),
+            ]),
+            padding=ft.Padding.only(left=10, right=10, top=20, bottom=10),
+            bgcolor=ft.Colors.WHITE,
+        )
+        
+        # 图片轮播区（简化版，用大emoji代替）
+        image_section = ft.Container(
+            content=ft.Column([
+                ft.Text(drone["images"][0], size=120),
+                ft.Container(
+                    content=ft.Row([
+                        ft.Container(
+                            width=8,
+                            height=8,
+                            border_radius=4,
+                            bgcolor=ft.Colors.BLUE,
+                        ),
+                    ], alignment=ft.MainAxisAlignment.CENTER),
+                    padding=10,
+                ),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            bgcolor=ft.Colors.BLUE_50,
+            padding=30,
+        )
+        
+        # 价格和标题
+        title_section = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(
+                        content=ft.Text(drone["tag"], size=12, color="white"),
+                        bgcolor=ft.Colors.BLUE,
+                        padding=ft.Padding.symmetric(vertical=4, horizontal=10),
+                        border_radius=4,
+                    ),
+                    ft.Container(
+                        content=ft.Text(f"已售 {drone['sales']}", size=12, color=ft.Colors.GREY_600),
+                    ),
+                ], spacing=10),
+                ft.Container(height=10),
+                ft.Text(drone["name"], size=24, weight="bold"),
+                ft.Container(height=10),
+                ft.Row([
+                    ft.Column([
+                        ft.Text(f"¥{drone["price"]}", size=32, color=ft.Colors.RED_700),
+                    ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.START),
+                    ft.Text(
+                        f"原价 ¥{drone['original_price']}",
+                        size=14,
+                        color=ft.Colors.GREY_500,
+                        style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH)
+                    ),
+                ], spacing=15, alignment=ft.MainAxisAlignment.START),
+            ]),
+            padding=20,
+            bgcolor=ft.Colors.WHITE,
+        )
+        
+        # 规格参数
+        specs_section = ft.Container(
+            content=ft.Column([
+                ft.Text("产品特性", size=18, weight="bold"),
+                ft.Container(height=10),
+                ft.Column([
+                    ft.Row([
+                        ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=ft.Colors.GREEN),
+                        ft.Text(feature, size=14),
+                    ], spacing=10) for feature in drone["features"]
+                ], spacing=8),
+            ]),
+            padding=20,
+            bgcolor=ft.Colors.WHITE,
+            margin=ft.Margin.only(top=10),
+        )
+        
+        # 商品描述
+        description_section = ft.Container(
+            content=ft.Column([
+                ft.Text("商品介绍", size=18, weight="bold"),
+                ft.Container(height=10),
+                ft.Text(
+                    drone["description"],
+                    size=14,
+                    color=ft.Colors.GREY_700,
+                ),
+            ]),
+            padding=20,
+            bgcolor=ft.Colors.WHITE,
+            margin=ft.Margin.only(top=10),
+        )
+        
+        # 库存信息
+        stock_section = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.INVENTORY_2_OUTLINED, size=16, color=ft.Colors.GREY_600),
+                ft.Text(
+                    f"库存：{drone['stock']} 件",
+                    size=14,
+                    color=ft.Colors.GREY_600,
+                ),
+            ], spacing=5),
+            padding=ft.Padding.symmetric(horizontal=20, vertical=10),
+            bgcolor=ft.Colors.WHITE,
+            margin=ft.Margin.only(top=10),
+        )
+        
+        # 底部操作栏
+        bottom_bar = ft.Container(
+            content=ft.Row([
+                ft.IconButton(
+                    icon=ft.Icons.FAVORITE_BORDER,
+                    icon_color=ft.Colors.GREY_700,
+                    on_click=lambda: print("收藏"),
+                ),
+                ft.OutlinedButton(
+                    "加入购物车",
+                    icon=ft.Icons.SHOPPING_CART_OUTLINED,
+                    on_click=on_add_to_cart,
+                    expand=True,
+                    height=50,
+                ),
+                ft.Button(
+                    "立即购买",
+                    on_click=on_buy_now,
+                    bgcolor=ft.Colors.BLUE,
+                    color=ft.Colors.WHITE,
+                    expand=True,
+                    height=50,
+                ),
+            ], spacing=10),
+            padding=ft.Padding.all(15),
+            bgcolor=ft.Colors.WHITE,
+            shadow=ft.BoxShadow(
+                spread_radius=1,
+                blur_radius=10,
+                color=ft.Colors.BLACK_12,
+                offset=ft.Offset(0, -2),
+            ),
+        )
+        
+        # 主内容区（可滚动）
+        main_content = ft.Column([
+            ft.Column([
+                image_section,
+                title_section,
+                specs_section,
+                description_section,
+                stock_section,
+            ], scroll=ft.ScrollMode.AUTO, expand=True),
+        ], spacing=0, expand=True)
+        
+        # 组装页面（主内容 + 底部栏）
+        return ft.Column([
+            top_bar,
+            main_content,
+            bottom_bar,
+        ], spacing=0, expand=True)
+
     # --- 组件工厂方法 ---
     def _category_item(self, icon, name):
+        def on_category_click(name):
+            print(f"分类: {name}")
+
         return ft.Container(
             content=ft.Column([
                 ft.Text(icon, size=25),
                 ft.Text(name, size=12, weight=ft.FontWeight.W_500),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            on_click=lambda _: self.handler.on_category_click(name),
+            on_click=lambda: on_category_click(name),
             padding=10,
             width=80,
             border_radius=10,
             ink=True,
         )
 
-    def _drone_card(self, name, price, tag, specs):
+    def _drone_card(self, drone_id, name, price, tag, specs):
         return ft.Container(
             content=ft.Column([
                 ft.Container(
@@ -659,22 +827,28 @@ class ViewBuilder:
             padding=12,
             bgcolor=ft.Colors.WHITE,
             border_radius=15,
-            shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.BLACK12),
-            on_click=lambda _: self.handler.on_drone_click(name),
+            shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.BLACK_12),
+            on_click=lambda: self.goto("drone", drone_id)
         )
 
     def _menu_item(self, icon, label):
+        def on_menu_click(label):
+            print(f"点击: {label}")
+
         return ft.Container(
             content=ft.Column([
                 ft.Icon(icon, size=28, color=ft.Colors.BLUE_700),
                 ft.Text(label, size=11, text_align=ft.TextAlign.CENTER),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
-            on_click=lambda _: self.handler.on_menu_click(label),
+            on_click=lambda: on_menu_click(label),
             padding=10,
             ink=True,
         )
 
     def _list_item(self, icon, title, trailing_text=None):
+        def on_settings_click(title):
+            print(f"设置: {title}")
+
         return ft.Container(
             content=ft.Row([
                 ft.Icon(icon, size=22, color=ft.Colors.GREY_700),
@@ -687,15 +861,15 @@ class ViewBuilder:
                 ft.Icon(ft.Icons.CHEVRON_RIGHT, size=20, color=ft.Colors.GREY_400),
             ], spacing=15),
             padding=ft.Padding.symmetric(horizontal=20, vertical=15),
-            on_click=lambda _: self.handler.on_settings_click(title),
+            on_click=lambda: on_settings_click(title),
             ink=True,
         )
 
 class App:
     def __init__(self):
         self.config = Config()
+        self.drone_manager = DroneManager()
         self.page = None
-        self.event_handler = EventHandler(self)
         self.view_builder = ViewBuilder(self)
 
     def before_main(self, page: ft.Page):
@@ -705,7 +879,7 @@ class App:
         page.padding = 0
 
         if not self.config.get("agreed"):
-            def on_agree_click(e):
+            def on_agree_click():
                 self.config.set("agreed", True)
                 page.controls.clear()
                 self.main(page)
@@ -762,12 +936,12 @@ class App:
                             ft.Row([
                                 ft.TextButton(
                                     "《用户协议》",
-                                    on_click=lambda _: show_document("用户协议", user_agreement_text),
+                                    on_click=lambda: show_document("用户协议", user_agreement_text),
                                 ),
                                 ft.Text("和", size=14),
                                 ft.TextButton(
                                     "《隐私政策》",
-                                    on_click=lambda _: show_document("隐私政策", privacy_policy_text),
+                                    on_click=lambda: show_document("隐私政策", privacy_policy_text),
                                 ),
                             ], alignment="center"),
                             ft.Container(height=10),
@@ -782,7 +956,7 @@ class App:
                     ),
                     ft.Container(height=20),
                     ft.Row([
-                        ft.OutlinedButton("退出应用", on_click=lambda _: sys.exit()),
+                        ft.OutlinedButton("退出应用", on_click=lambda: sys.exit()),
                         ft.Button("同意并继续", on_click=on_agree_click, bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE),
                     ], alignment="center", spacing=20),
                 ], horizontal_alignment="center", alignment="center"),
@@ -797,17 +971,27 @@ class App:
             self.main(page)
 
     def main(self, page: ft.Page):
-        # 设置底部导航栏
+        def on_nav_change(e):
+            """底部导航栏切换"""
+            index = e.control.selected_index
+            
+            if index == 0:
+                self.view_builder.goto("home")
+            elif index == 1:
+                self.view_builder.goto("orders")
+            elif index == 2:
+                self.view_builder.goto("profile")
+
         page.navigation_bar = ft.NavigationBar(
             selected_index=0,
-            on_change=self.event_handler.on_nav_change,
+            on_change=on_nav_change,
             destinations=[
                 ft.NavigationBarDestination(icon=ft.Icons.EXPLORE_OUTLINED, selected_icon=ft.Icons.EXPLORE, label="首页"),
                 ft.NavigationBarDestination(icon=ft.Icons.LIST_ALT_OUTLINED, selected_icon=ft.Icons.LIST_ALT, label="订单"),
                 ft.NavigationBarDestination(icon=ft.Icons.PERSON_OUTLINE, selected_icon=ft.Icons.PERSON, label="我的"),
             ],
         )
-        
+
         # 加载首页
         page.add(self.view_builder.build_home())
 
