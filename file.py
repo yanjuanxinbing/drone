@@ -1,4 +1,6 @@
+import os
 import json
+import shutil
 
 ROOT = "db"
 
@@ -40,8 +42,19 @@ class FileReader:
             return {}
         
     @staticmethod
-    def read_img(filename: str, subdir: str = "img"):
+    def read_img(filename: str, subdir: str = "img") -> bytes | None:
+        """读取图片，文件存在返回 bytes，否则返回 None"""
         path = f"{ROOT}/{subdir}/{filename}"
+        
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    return f.read()
+            except Exception as e:
+                print(f"读取图片出错: {e}")
+                return None
+
+        return None
 
 class FileWriter:
     @staticmethod
@@ -55,3 +68,18 @@ class FileWriter:
 
         except Exception as e:
             print(f"FileWriter: JSON 写入失败 - {path} ({e})")
+
+    @staticmethod
+    def save_avatar(filename: str, content: bytes, subdir: str = "img") -> str:
+        """
+        将用户选择的图片拷贝到 db/img/，返回相对路径。
+        filename 建议用手机号命名，如 '15616131369.jpg'
+        """
+        path = f"{ROOT}/{subdir}/{filename}"
+
+        try:
+            with open(path, "wb") as f:
+                f.write(content)
+
+        except Exception as e:
+            print(f"FileWriter: AVATAR 保存失败 - {path} ({e})")

@@ -16,10 +16,33 @@ class UserManager:
     def get(self, phone_number) -> dict:
         return self.users.get(phone_number)
 
+    def get_addresses(self, phone: str) -> list:
+        return self.get(phone).get("addresses", [])
+
+    def add_address(self, phone: str, address: str):
+        addresses = self.get_addresses(phone)
+        new_id = str(int(addresses[-1]["id"]) + 1) if addresses else "1"
+        addresses.append({"id": new_id, "address": address})
+        self.users[phone]["addresses"] = addresses
+        self.save()
+
+    def update_address(self, phone: str, addr_id: str, new_address: str):
+        for addr in self.get(phone).get("addresses"):
+            if addr["id"] == addr_id:
+                addr["address"] = new_address
+                self.save()
+                return
+
+    def delete_address(self, phone: str, addr_id: str):
+        self.users[phone]["addresses"] = [
+            a for a in self.get(phone).get("addresses") if a["id"] != addr_id
+        ]
+        self.save()
+
     def contains(self, phone_number: str) -> bool: 
         return phone_number in self.users
 
-    def add(self, phone_number, nick_name, password, gender="保密", birthday="", avatar=""):
+    def add(self, phone_number, nick_name, password, gender="保密", birthday=""):
         """添加用户时，存储哈希后的密码"""
         hashed_pwd = self._hash_password(password)
         
@@ -27,8 +50,7 @@ class UserManager:
             "nick_name": nick_name,
             "password": hashed_pwd,
             "gender": gender,
-            "birthday": birthday,
-            "avatar": avatar
+            "birthday": birthday
         }
         self.save()
 
@@ -37,6 +59,12 @@ class UserManager:
         self.users[phone_number]["nick_name"] = nick_name
         self.users[phone_number]["gender"] = gender
         self.users[phone_number]["birthday"] = birthday
+
+        self.save()
+
+    def update_password(self, phone_number, new_password):
+        """更新密码（存储哈希后的新密码）"""
+        self.users[phone_number]["password"] = self._hash_password(new_password)
 
         self.save()
 
@@ -49,6 +77,8 @@ class UserManager:
         self.users.pop(phone_number_old)
         self.users[phone_number_new] = user
         self.save()
+
+        return True
 
     def verify_login(self, phone_number: str, input_password: str) -> bool:
         """验证登录：比对输入密码的哈希值与存储的是否一致"""

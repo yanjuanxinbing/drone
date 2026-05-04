@@ -1,7 +1,9 @@
 import re
 import sys
-import flet as ft
+import aiohttp
+import keyvals
 import datetime
+import flet as ft
 from config import Config
 from usermanager import UserManager
 from dronemanager import DroneManager
@@ -37,6 +39,12 @@ class ViewBuilder:
             view = self.build_settings()
         elif name == "personal_info":
             view = self.build_personal_info()
+        elif name == "change_password":
+            view = self.build_change_password()
+        elif name == "change_phone":
+            view = self.build_change_phone()
+        elif name == "addresses":
+            view = self.build_addresses()
 
         self.app.page.add(view)
         self.app.page.update()
@@ -135,9 +143,27 @@ class ViewBuilder:
     def build_personal_info(self):
         """个人信息编辑页面"""
         # 1. 获取现有配置数据
-        username = self.app.config.get("last_name")
-        gender_val = self.app.config.get("last_gender")
-        birthday_val = self.app.config.get("last_birthday")
+        phone = self.app.config.get("last_user")
+        username = self.app.user_manager.get(phone)["nick_name"]
+        gender_val = self.app.user_manager.get(phone)["gender"]
+        birthday_val = self.app.user_manager.get(phone)["birthday"]
+
+        user_avatar = ft.CircleAvatar(
+            content=ft.Icon(ft.Icons.PERSON, size=40),
+            radius=50,
+            foreground_image_src=FileReader.read_img(f"{phone}.png")
+        )
+
+        file_picker = ft.FilePicker()
+
+        async def select():
+            files = await file_picker.pick_files(
+                file_type=ft.FilePickerFileType.IMAGE, 
+                with_data=True
+                )
+            
+            user_avatar.foreground_image_src = files[0].bytes
+            user_avatar.update()
 
         # --- UI 控件定义 ---
         # 昵称
@@ -168,7 +194,6 @@ class ViewBuilder:
                 hint_text="点击图标选择日期",
             )
 
-        # --- 交互事件处理 ---
         # 日期选择器逻辑
         def on_date_change(e):
             if e.control.value:
@@ -184,8 +209,6 @@ class ViewBuilder:
             first_date=datetime.datetime(1900, 1, 1),
             last_date=datetime.datetime.now(),
         )
-        # 将选择器加入页面 overlay
-        self.app.page.overlay.append(date_picker)
 
         def on_save_click():
             new_nickname = nickname_field.value.strip()
@@ -193,19 +216,15 @@ class ViewBuilder:
                 self.show_snackbar("昵称不能为空", ft.Colors.RED_400)
                 return
 
-            usermanager = UserManager()
+            avatar_bytes = user_avatar.foreground_image_src
+
+            if avatar_bytes is not None:
+                FileWriter.save_avatar(f"{phone}.png", avatar_bytes)
 
             # 保存所有信息到配置
-            self.app.config.set("last_name", new_nickname)
-            self.app.config.set("last_gender", gender_dropdown.value)
-            self.app.config.set("last_birthday", birthday_field.value)
-            
-            usermanager.update_value(self.app.config.get("last_user"), new_nickname, gender_dropdown.value, birthday_field.value)
+            self.app.user_manager.update_value(phone, new_nickname, gender_dropdown.value, birthday_field.value)
 
             self.show_snackbar("个人信息已保存", ft.Colors.GREEN_400)
-
-        def on_change_avatar(e):
-            self.show_snackbar("头像更换功能开发中", ft.Colors.BLUE_400)
 
         # --- 页面布局 ---
         return ft.Column([
@@ -225,9 +244,8 @@ class ViewBuilder:
                     ft.Container(height=20),
                     # 头像区域
                     ft.Column([
-                        ft.Container(content=ft.Text("👤", size=80), width=120, height=120, 
-                                    bgcolor=ft.Colors.BLUE_100, border_radius=60, alignment=ft.Alignment.CENTER),
-                        ft.TextButton("更换头像", icon=ft.Icons.CAMERA_ALT_OUTLINED, on_click=on_change_avatar),
+                        user_avatar,
+                        ft.TextButton("更换头像", icon=ft.Icons.CAMERA_ALT_OUTLINED, on_click=select),
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
 
                     # 表单区域
@@ -256,6 +274,465 @@ class ViewBuilder:
                 expand=True,
                 padding=20,
             )
+        ], expand=True)
+
+    def build_change_password(self):
+        """修改密码页面"""
+        phone = self.app.config.get("last_user")
+
+        current_password_field = ft.TextField(
+            label="当前密码",
+            hint_text="请输入当前密码",
+            prefix_icon=ft.Icons.LOCK_OUTLINE,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+        )
+
+        new_password_field = ft.TextField(
+            label="新密码",
+            hint_text="请输入新密码（至少6位）",
+            prefix_icon=ft.Icons.LOCK,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+        )
+
+        confirm_password_field = ft.TextField(
+            label="确认新密码",
+            hint_text="请再次输入新密码",
+            prefix_icon=ft.Icons.LOCK,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+        )
+
+        def on_save_click():
+            current = current_password_field.value
+            new_pwd = new_password_field.value
+            confirm = confirm_password_field.value
+
+            if not current:
+                self.show_snackbar("请输入当前密码", ft.Colors.RED_400)
+                return
+
+            if not self.app.user_manager.verify_login(phone, current):
+                self.show_snackbar("当前密码错误", ft.Colors.RED_400)
+                return
+
+            if not new_pwd:
+                self.show_snackbar("请输入新密码", ft.Colors.RED_400)
+                return
+
+            if len(new_pwd) < 6:
+                self.show_snackbar("新密码至少需要6位", ft.Colors.RED_400)
+                return
+
+            if new_pwd == current:
+                self.show_snackbar("新密码不能与当前密码相同", ft.Colors.RED_400)
+                return
+
+            if new_pwd != confirm:
+                self.show_snackbar("两次输入的密码不一致", ft.Colors.RED_400)
+                return
+
+            self.app.user_manager.update_password(phone, new_pwd)
+            self.show_snackbar("密码修改成功", ft.Colors.GREEN_400)
+
+            # 清空输入框
+            current_password_field.value = ""
+            new_password_field.value = ""
+            confirm_password_field.value = ""
+            self.app.page.update()
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("修改密码", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(height=20),
+
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.LOCK_RESET, size=80, color=ft.Colors.BLUE),
+                        alignment=ft.Alignment.CENTER,
+                    ),
+
+                    ft.Container(height=20),
+
+                    ft.Text("修改密码", size=24, weight="bold", text_align=ft.TextAlign.CENTER),
+                    ft.Text("请验证当前密码后设置新密码", size=14,
+                            color=ft.Colors.GREY_600, text_align=ft.TextAlign.CENTER),
+
+                    ft.Container(height=30),
+
+                    current_password_field,
+                    ft.Container(height=10),
+                    ft.Divider(),
+                    ft.Container(height=10),
+                    new_password_field,
+                    ft.Container(height=10),
+                    confirm_password_field,
+
+                    ft.Container(height=30),
+
+                    ft.Button(
+                        "确认修改", width=350, height=55,
+                        bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE,
+                        on_click=on_save_click,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+                    ),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=20,
+            ),
+        ], expand=True)
+
+    def build_change_phone(self):
+        """手机换绑页面"""
+        phone = self.app.config.get("last_user")
+
+        new_phone_field = ft.TextField(
+            label="新手机号",
+            hint_text="请输入新手机号",
+            prefix_icon=ft.Icons.PHONE,
+            border_radius=10,
+            width=350,
+            keyboard_type=ft.KeyboardType.PHONE,
+        )
+
+        password_field = ft.TextField(
+            label="当前密码",
+            hint_text="请输入当前密码验证身份",
+            prefix_icon=ft.Icons.LOCK_OUTLINE,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+        )
+
+        def on_save_click():
+            new_phone = new_phone_field.value
+            password = password_field.value
+
+            if not password:
+                self.show_snackbar("请输入当前密码", ft.Colors.RED_400)
+                return
+
+            if not self.app.user_manager.verify_login(phone, password):
+                self.show_snackbar("密码错误", ft.Colors.RED_400)
+                return
+
+            if not new_phone:
+                self.show_snackbar("请输入新手机号", ft.Colors.RED_400)
+                return
+
+            phone_pattern = r"^1[3-9]\d{9}$"
+            if not re.match(phone_pattern, new_phone):
+                self.show_snackbar("请输入正确的11位手机号码", ft.Colors.RED_400)
+                return
+
+            if new_phone == phone:
+                self.show_snackbar("新手机号不能与当前手机号相同", ft.Colors.RED_400)
+                return
+
+            if not self.app.user_manager.update_key(phone, new_phone):
+                self.show_snackbar("该手机号已被注册", ft.Colors.RED_400)
+                return
+
+            self.app.config.set("last_user", new_phone)
+            self.show_snackbar("手机号换绑成功", ft.Colors.GREEN_400)
+            self.goto("settings")
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("手机换绑", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(height=20),
+
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.PHONE_ANDROID, size=80, color=ft.Colors.BLUE),
+                        alignment=ft.Alignment.CENTER,
+                    ),
+
+                    ft.Container(height=20),
+
+                    ft.Text("手机换绑", size=24, weight="bold", text_align=ft.TextAlign.CENTER),
+                    ft.Text(
+                        f"当前手机号：{phone[:3]}****{phone[7:]}",
+                        size=14, color=ft.Colors.GREY_600, text_align=ft.TextAlign.CENTER,
+                    ),
+
+                    ft.Container(height=30),
+
+                    password_field,
+                    ft.Container(height=10),
+                    ft.Divider(),
+                    ft.Container(height=10),
+                    new_phone_field,
+
+                    ft.Container(height=30),
+
+                    ft.Button(
+                        "确认换绑", width=350, height=55,
+                        bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE,
+                        on_click=on_save_click,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+                    ),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=20,
+            ),
+        ], expand=True)
+
+    def build_addresses(self):
+        """常用地址页面"""
+        phone = self.app.config.get("last_user")
+        AMAP_KEY = keyvals.AMAP_KEY
+
+        def build_address_list():
+            addresses = self.app.user_manager.get_addresses(phone)
+            def on_delete(addr_id):
+                self.app.user_manager.delete_address(phone, addr_id)
+                refresh()
+
+            def on_edit(addr):
+                self.app.page.run_task(show_address_dialog, addr)
+
+            return ft.Column([
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.BLUE, size=20),
+                        ft.Text(addr["address"], size=15, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT_OUTLINED,
+                            icon_color=ft.Colors.BLUE,
+                            on_click=lambda a=addr: on_edit(a),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_color=ft.Colors.RED_400,
+                            on_click=lambda aid=addr["id"]: on_delete(aid),
+                        ),
+                    ]),
+                    padding=ft.Padding(20, 15, 10, 15),
+                    bgcolor=ft.Colors.WHITE,
+                    border_radius=12,
+                    shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                )
+                for addr in addresses
+            ], spacing=12)
+
+        list_container = ft.Container(expand=True)
+
+        def refresh():
+            list_container.content = build_address_list()
+            self.app.page.update()
+
+        async def get_city() -> str:
+            """IP 定位获取当前城市"""
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://restapi.amap.com/v3/ip",
+                        params={"key": AMAP_KEY},
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        data = await resp.json()
+                        if data.get("status") == "1":
+                            return data.get("city") or data.get("province") or ""
+            except Exception as e:
+                print(f"IP定位失败: {e}")
+            return ""
+
+        async def search_tips(keyword: str, city: str) -> list:
+            """输入提示补全"""
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://restapi.amap.com/v3/assistant/inputtips",
+                        params={
+                            "key": AMAP_KEY,
+                            "keywords": keyword,
+                            "city": city,
+                            "citylimit": "true",
+                            "datatype": "all",
+                        },
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        data = await resp.json()
+                        if data.get("status") == "1":
+                            return data.get("tips", [])
+            except Exception as e:
+                print(f"输入提示失败: {e}")
+            return []
+
+        async def show_address_dialog(existing=None):
+            """新增或编辑地址弹窗"""
+            is_edit = existing is not None
+
+            # 先获取城市
+            city = await get_city()
+
+            address_field = ft.TextField(
+                label="搜索地址",
+                hint_text="输入地址关键词...",
+                value=existing["address"] if is_edit else "",
+                border_radius=10,
+                width=400,
+                prefix_icon=ft.Icons.SEARCH,
+            )
+
+            tips_column = ft.Column([], spacing=0)
+
+            selected_address = {"value": existing["address"] if is_edit else ""}
+
+            async def on_input_change(e):
+                keyword = address_field.value.strip()
+                tips_column.controls.clear()
+
+                if len(keyword) < 1:
+                    self.app.page.update()
+                    return
+
+                tips = await search_tips(keyword, city)
+
+                for tip in tips[:6]:
+                    name = tip.get("name", "")
+                    district = tip.get("district", "")
+                    address = tip.get("address", "")
+                    full = f"{district}{name}" if not address else f"{district}{name} {address}"
+
+                    def on_tip_click(_, f=full):
+                        selected_address["value"] = f
+                        address_field.value = f
+                        tips_column.controls.clear()
+                        self.app.page.update()
+
+                    tips_column.controls.append(
+                        ft.Container(
+                            content=ft.Column([
+                                ft.Text(name, size=14, weight="bold"),
+                                ft.Text(f"{district} {address}", size=12, color=ft.Colors.GREY_600),
+                            ], spacing=2),
+                            padding=ft.Padding(15, 10, 15, 10),
+                            on_click=on_tip_click,
+                            ink=True,
+                            border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_200)),
+                        )
+                    )
+
+                self.app.page.update()
+
+            address_field.on_change = on_input_change
+
+            def on_confirm(e):
+                address = selected_address["value"] or address_field.value.strip()
+                if not address:
+                    self.show_snackbar("请选择或输入地址", ft.Colors.RED_400)
+                    return
+
+                if is_edit:
+                    self.app.user_manager.update_address(phone, existing["id"], address)
+                    self.show_snackbar("地址已更新", ft.Colors.GREEN_400)
+                else:
+                    self.app.user_manager.add_address(phone, address)
+                    self.show_snackbar("地址已添加", ft.Colors.GREEN_400)
+
+                dialog.open = False
+                self.app.page.update()
+                refresh()
+
+            def on_cancel(e):
+                dialog.open = False
+                self.app.page.update()
+
+            # 定位按钮，显示当前城市
+            location_hint = ft.Row([
+                ft.Icon(ft.Icons.MY_LOCATION, size=14, color=ft.Colors.BLUE),
+                ft.Text(
+                    f"已定位到：{city}" if city else "定位失败，请手动输入",
+                    size=12,
+                    color=ft.Colors.BLUE if city else ft.Colors.GREY_500,
+                ),
+            ], spacing=4)
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("编辑地址" if is_edit else "新增地址", weight="bold"),
+                content=ft.Container(
+                    content=ft.Column([
+                        location_hint,
+                        ft.Container(height=8),
+                        address_field,
+                        ft.Container(
+                            content=tips_column,
+                            border_radius=10,
+                            bgcolor=ft.Colors.WHITE,
+                            shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                            visible=True,
+                        ),
+                    ], spacing=4),
+                    width=400,
+                    padding=ft.Padding(0, 10, 0, 0),
+                ),
+                actions=[
+                    ft.TextButton("取消", on_click=on_cancel),
+                    ft.Button(
+                        "确认",
+                        bgcolor=ft.Colors.BLUE,
+                        color=ft.Colors.WHITE,
+                        on_click=on_confirm,
+                    ),
+                ],
+            )
+            self.app.page.overlay.append(dialog)
+            dialog.open = True
+            self.app.page.update()
+
+        refresh()
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("常用地址", size=20, weight="bold", expand=True),
+                    ft.IconButton(
+                        icon=ft.Icons.ADD,
+                        icon_color=ft.Colors.BLUE,
+                        on_click=lambda: self.app.page.run_task(show_address_dialog),
+                    ),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+                    list_container,
+                ], scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=20,
+            ),
         ], expand=True)
 
     def build_settings(self):
@@ -289,13 +766,13 @@ class ViewBuilder:
                         leading=ft.Icon(ft.Icons.LOCK_OUTLINE),
                         title=ft.Text("修改密码"),
                         subtitle=ft.Text("定期修改以保护账号安全"),
-                        on_click=lambda: print("修改密码")
+                        on_click=lambda: self.goto("change_password")
                     ),
                     ft.ListTile(
-                        leading=ft.Icon(ft.Icons.PAYMENTS_OUTLINED),
-                        title=ft.Text("支付方式"),
-                        subtitle=ft.Text("银行卡、支付宝、微信"),
-                        on_click=lambda: print("支付方式管理")
+                        leading=ft.Icon(ft.Icons.PHONE_ANDROID),
+                        title=ft.Text("手机换绑"),
+                        subtitle=ft.Text("更换绑定的手机号码"),
+                        on_click=lambda _: self.goto("change_phone")
                     ),
 
                     # ==================== 租赁服务 ====================
@@ -307,7 +784,7 @@ class ViewBuilder:
                         leading=ft.Icon(ft.Icons.LOCATION_ON_OUTLINED),
                         title=ft.Text("常用地址"),
                         subtitle=ft.Text("取机/还机地址管理"),
-                        on_click=lambda: print("地址管理")
+                        on_click=lambda: self.goto("addresses")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED),
@@ -352,8 +829,9 @@ class ViewBuilder:
 
     def build_profile(self):
         """构建我的页面"""
-        username = self.app.config.get("last_name") or "游客"
-        is_logged_in = bool(self.app.config.get("last_name"))
+        phone = self.app.config.get("last_user")
+        username = self.app.user_manager.get(phone).get("nick_name") if phone else "游客"
+        is_logged_in = bool(phone)
 
         def on_logout_click():
             """退出登录"""
@@ -459,15 +937,10 @@ class ViewBuilder:
             if not password:
                 self.show_snackbar("请输入密码", ft.Colors.RED_400)
                 return
-            
-            user_manager = UserManager()
 
             # 登录成功
-            if user_manager.verify_login(phone_number, password):
+            if self.app.user_manager.verify_login(phone_number, password):
                 self.app.config.set("last_user", phone_number)
-                self.app.config.set("last_name", user_manager.users[phone_number]["nick_name"])
-                self.app.config.set("last_gender", user_manager.users[phone_number]["gender"])
-                self.app.config.set("last_birthday", user_manager.users[phone_number]["birthday"])
             else:
                 self.show_snackbar("手机号或密码错误", ft.Colors.RED_400)
                 return
@@ -649,8 +1122,6 @@ class ViewBuilder:
             password = password_field.value
             confirm_password = confirm_password_field.value
 
-            user_manager = UserManager()
-
             # 验证手机号
             if not phone_number:
                 self.show_snackbar("请输入手机号", ft.Colors.RED_400)
@@ -661,7 +1132,7 @@ class ViewBuilder:
                 self.show_snackbar("请输入正确的11位手机号码", ft.Colors.RED_400)
                 return
             
-            if user_manager.contains(phone_number):
+            if self.app.user_manager.contains(phone_number):
                 self.show_snackbar("手机号已注册，请登录", ft.Colors.RED_400)
                 return
 
@@ -685,12 +1156,9 @@ class ViewBuilder:
                 return
             
             # 注册成功
-            user_manager.add(phone_number, f"用户{phone_number}", password)
+            self.app.user_manager.add(phone_number, f"用户{phone_number}", password)
 
             self.app.config.set("last_user", phone_number)
-            self.app.config.set("last_name", f"用户{phone_number}")
-            self.app.config.set("last_gender", "保密")
-            self.app.config.set("last_birthday", "")
 
             snackbar = ft.SnackBar(
                 content=ft.Text(f"注册成功！欢迎 用户{phone_number}"),
@@ -1081,6 +1549,7 @@ class ViewBuilder:
 class App:
     def __init__(self):
         self.config = Config()
+        self.user_manager = UserManager()
         self.drone_manager = DroneManager()
         self.page = None
         self.view_builder = ViewBuilder(self)
