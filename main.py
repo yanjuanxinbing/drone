@@ -1,10 +1,12 @@
 import re
 import sys
 import aiohttp
+import asyncio
 import keyvals
 import datetime
 import flet as ft
 from config import Config
+import flet_geolocator as ftg
 from usermanager import UserManager
 from dronemanager import DroneManager
 from file import FileReader, FileWriter
@@ -504,94 +506,126 @@ class ViewBuilder:
             ),
         ], expand=True)
 
+    async def get_loaction(self, AMAP_KEY) -> str:
+        gl = ftg.Geolocator()
+        pos = await gl.get_current_position()
+        lat, lng = pos.latitude, pos.longitude
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://restapi.amap.com/v3/assistant/coordinate/convert",
+                params={
+                    "key": AMAP_KEY,
+                    "locations": f"{lng:.6f},{lat:.6f}",
+                    "coordsys": "gps"
+                }
+            ) as resp:
+                data = await resp.json()
+                pos = data.get("locations")
+                lng_str, lat_str = pos.split(",")
+                lng = f"{float(lng_str):.6f}"
+                lat = f"{float(lat_str):.6f}"
+                location = f"{lng},{lat}"
+                return location
+
+    async def get_addr_citycode(self, AMAP_KEY, location: str) -> tuple[str, str]:
+        """定位获取当前位置和citycode"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://restapi.amap.com/v3/geocode/regeo",
+                    params={
+                        "key": AMAP_KEY,
+                        "location": location
+                        }
+                ) as resp:
+                    data = await resp.json()
+                    if data.get("status") == "1":
+                        return data.get("regeocode").get("formatted_address"), data.get("regeocode").get("addressComponent").get("citycode")
+        except Exception as e:
+            print(f"定位失败: {e}")
+
+    async def search_tips(self, AMAP_KEY, keyword: str, location: str, citycode: str) -> list:
+        """输入提示补全"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://restapi.amap.com/v3/assistant/inputtips",
+                    params={
+                        "key": AMAP_KEY,
+                        "keywords": keyword,
+                        "location": location,
+                        "city": citycode
+                    }
+                ) as resp:
+                    data = await resp.json()
+                    if data.get("status") == "1":
+                        return data.get("tips", [])
+                    else:
+                        return []
+        except Exception as e:
+            print(f"输入提示失败: {e}")
+            return []
+
     def build_addresses(self):
         """常用地址页面"""
         phone = self.app.config.get("last_user")
         AMAP_KEY = keyvals.AMAP_KEY
 
-        def build_address_list():
-            addresses = self.app.user_manager.get_addresses(phone)
-            def on_delete(addr_id):
-                self.app.user_manager.delete_address(phone, addr_id)
-                refresh()
-
-            def on_edit(addr):
-                self.app.page.run_task(show_address_dialog, addr)
-
-            return ft.Column([
-                ft.Container(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.BLUE, size=20),
-                        ft.Text(addr["address"], size=15, expand=True),
-                        ft.IconButton(
-                            icon=ft.Icons.EDIT_OUTLINED,
-                            icon_color=ft.Colors.BLUE,
-                            on_click=lambda a=addr: on_edit(a),
-                        ),
-                        ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINE,
-                            icon_color=ft.Colors.RED_400,
-                            on_click=lambda aid=addr["id"]: on_delete(aid),
-                        ),
-                    ]),
-                    padding=ft.Padding(20, 15, 10, 15),
-                    bgcolor=ft.Colors.WHITE,
-                    border_radius=12,
-                    shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
-                )
-                for addr in addresses
-            ], spacing=12)
-
-        list_container = ft.Container(expand=True)
-
-        def refresh():
-            list_container.content = build_address_list()
-            self.app.page.update()
-
-        async def get_city() -> str:
-            """IP 定位获取当前城市"""
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        "https://restapi.amap.com/v3/ip",
-                        params={"key": AMAP_KEY},
-                        timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp:
-                        data = await resp.json()
-                        if data.get("status") == "1":
-                            return data.get("city") or data.get("province") or ""
-            except Exception as e:
-                print(f"IP定位失败: {e}")
-            return ""
-
-        async def search_tips(keyword: str, city: str) -> list:
-            """输入提示补全"""
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        "https://restapi.amap.com/v3/assistant/inputtips",
-                        params={
-                            "key": AMAP_KEY,
-                            "keywords": keyword,
-                            "city": city,
-                            "citylimit": "true",
-                            "datatype": "all",
-                        },
-                        timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp:
-                        data = await resp.json()
-                        if data.get("status") == "1":
-                            return data.get("tips", [])
-            except Exception as e:
-                print(f"输入提示失败: {e}")
-            return []
-
         async def show_address_dialog(existing=None):
             """新增或编辑地址弹窗"""
             is_edit = existing is not None
 
-            # 先获取城市
-            city = await get_city()
+            # 获取城市和坐标
+            location = await self.get_loaction(AMAP_KEY)
+            addr, citycode = await self.get_addr_citycode(AMAP_KEY, location)
+
+            tips_column = ft.Column([], spacing=0)
+            debounce_task = None
+            async def on_input_change():
+                tips_column.controls.clear()
+
+                keyword = address_field.value
+                if not keyword:
+                    self.app.page.update()
+                    return
+
+                # 取消上一个还没执行的任务
+                nonlocal debounce_task
+                if debounce_task:
+                    debounce_task.cancel()
+
+                async def delayed_search():
+                    await asyncio.sleep(0.5)
+                    tips = await self.search_tips(AMAP_KEY, keyword, location, citycode)
+
+                    for tip in tips[:6]:
+                        name = tip.get("name", "")
+                        district = tip.get("district", "")
+                        address = tip.get("address", "")
+                        full = f"{district}{name}" if not address else f"{district}{name} {address}"
+
+                        def on_tip_click(_, f=full):
+                            address_field.value = f
+                            tips_column.controls.clear()
+                            self.app.page.update()
+
+                        tips_column.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Text(name, size=14, weight="bold"),
+                                    ft.Text(f"{district} {address}", size=12, color=ft.Colors.GREY_600),
+                                ], spacing=2),
+                                padding=ft.Padding(15, 10, 15, 10),
+                                on_click=on_tip_click,
+                                ink=True,
+                                border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_200)),
+                            )
+                        )
+
+                    self.app.page.update()
+
+                debounce_task = self.app.page.run_task(delayed_search)
 
             address_field = ft.TextField(
                 label="搜索地址",
@@ -600,53 +634,11 @@ class ViewBuilder:
                 border_radius=10,
                 width=400,
                 prefix_icon=ft.Icons.SEARCH,
+                on_change=on_input_change
             )
 
-            tips_column = ft.Column([], spacing=0)
-
-            selected_address = {"value": existing["address"] if is_edit else ""}
-
-            async def on_input_change(e):
-                keyword = address_field.value.strip()
-                tips_column.controls.clear()
-
-                if len(keyword) < 1:
-                    self.app.page.update()
-                    return
-
-                tips = await search_tips(keyword, city)
-
-                for tip in tips[:6]:
-                    name = tip.get("name", "")
-                    district = tip.get("district", "")
-                    address = tip.get("address", "")
-                    full = f"{district}{name}" if not address else f"{district}{name} {address}"
-
-                    def on_tip_click(_, f=full):
-                        selected_address["value"] = f
-                        address_field.value = f
-                        tips_column.controls.clear()
-                        self.app.page.update()
-
-                    tips_column.controls.append(
-                        ft.Container(
-                            content=ft.Column([
-                                ft.Text(name, size=14, weight="bold"),
-                                ft.Text(f"{district} {address}", size=12, color=ft.Colors.GREY_600),
-                            ], spacing=2),
-                            padding=ft.Padding(15, 10, 15, 10),
-                            on_click=on_tip_click,
-                            ink=True,
-                            border=ft.Border(bottom=ft.BorderSide(1, ft.Colors.GREY_200)),
-                        )
-                    )
-
-                self.app.page.update()
-
-            address_field.on_change = on_input_change
-
-            def on_confirm(e):
-                address = selected_address["value"] or address_field.value.strip()
+            def on_confirm():
+                address = address_field.value
                 if not address:
                     self.show_snackbar("请选择或输入地址", ft.Colors.RED_400)
                     return
@@ -662,7 +654,7 @@ class ViewBuilder:
                 self.app.page.update()
                 refresh()
 
-            def on_cancel(e):
+            def on_cancel():
                 dialog.open = False
                 self.app.page.update()
 
@@ -670,9 +662,9 @@ class ViewBuilder:
             location_hint = ft.Row([
                 ft.Icon(ft.Icons.MY_LOCATION, size=14, color=ft.Colors.BLUE),
                 ft.Text(
-                    f"已定位到：{city}" if city else "定位失败，请手动输入",
+                    f"已定位到：{addr}" if addr else "定位失败，请手动输入",
                     size=12,
-                    color=ft.Colors.BLUE if city else ft.Colors.GREY_500,
+                    color=ft.Colors.BLUE if addr else ft.Colors.GREY_500,
                 ),
             ], spacing=4)
 
@@ -708,7 +700,43 @@ class ViewBuilder:
             dialog.open = True
             self.app.page.update()
 
-        refresh()
+        def build_address_list():
+            addresses = self.app.user_manager.get_addresses(phone)
+            def on_delete(addr_id):
+                self.app.user_manager.delete_address(phone, addr_id)
+                refresh()
+
+            return ft.Column([
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.BLUE, size=20),
+                        ft.Text(addr["address"], size=15, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.EDIT_OUTLINED,
+                            icon_color=ft.Colors.BLUE,
+                            on_click=lambda _, addr=addr: self.app.page.run_task(show_address_dialog, addr),
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.DELETE_OUTLINE,
+                            icon_color=ft.Colors.RED_400,
+                            on_click=lambda _, id=addr["id"]: on_delete(id),
+                        ),
+                    ]),
+                    padding=ft.Padding(20, 15, 10, 15),
+                    bgcolor=ft.Colors.WHITE,
+                    border_radius=12,
+                    shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                )
+                for addr in addresses
+            ], spacing=12)
+
+        list_container = ft.Container(content=build_address_list(), expand=True)
+
+        def refresh():
+            list_container.content = build_address_list()
+            self.app.page.update()
+
+        self.app.page.update()
 
         return ft.Column([
             # 顶部栏
