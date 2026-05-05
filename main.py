@@ -19,34 +19,43 @@ class ViewBuilder:
     def goto(self, name, drone_id=None):
         """通用页面跳转"""
         self.app.page.controls.clear()
-        
-        if name == "home":
-            self.app.page.navigation_bar.selected_index = 0
-            view = self.build_home()
-        elif name == "orders":
-            self.app.page.navigation_bar.selected_index = 1
-            view = self.build_orders()
-        elif name == "profile":
-            self.app.page.navigation_bar.selected_index = 2
-            view = self.build_profile()
-        elif name == "login":
-            view = self.build_login()
-        elif name == "register":
-            view = self.build_register()
-        elif name == "forget":
-            print("忘记密码")
-        elif name == "drone":
-            view = self.build_drone_detail(drone_id)
-        elif name == "settings":
-            view = self.build_settings()
-        elif name == "personal_info":
-            view = self.build_personal_info()
-        elif name == "change_password":
-            view = self.build_change_password()
-        elif name == "change_phone":
-            view = self.build_change_phone()
-        elif name == "addresses":
-            view = self.build_addresses()
+
+        nav = self.app.page.navigation_bar
+        match name:
+            case "home":
+                nav.selected_index = 0
+                view = self.build_home()
+            case "orders":
+                nav.selected_index = 1
+                view = self.build_orders()
+            case "profile":
+                nav.selected_index = 2
+                view = self.build_profile()
+            case "login":
+                view = self.build_login()
+            case "register":
+                view = self.build_register()
+            case "forget":
+                view = self.build_forget()
+            case "drone":
+                view = self.build_drone_detail(drone_id)
+            case "settings":
+                view = self.build_settings()
+            case "personal_info":
+                view = self.build_personal_info()
+            case "change_password":
+                view = self.build_change_password()
+            case "change_phone":
+                view = self.build_change_phone()
+            case "addresses":
+                view = self.build_addresses()
+            case "privacy_settings":
+                view = self.build_privacy_settings()
+            case "help_center":
+                view = self.build_help_center()
+            case _:
+                print(f"未知路由: {name}")
+                return
 
         self.app.page.add(view)
         self.app.page.update()
@@ -87,17 +96,6 @@ class ViewBuilder:
             margin=ft.Margin.only(top=-25),
         )
 
-        categories = ft.Row(
-            [
-                self._category_item("📷", "航拍摄影"),
-                self._category_item("🏗️", "工业巡检"),
-                self._category_item("📐", "测绘勘察"),
-                self._category_item("🎮", "自拍娱乐"),
-            ],
-            scroll=ft.ScrollMode.HIDDEN,
-            alignment=ft.MainAxisAlignment.CENTER,
-        )
-
         # 从数据文件获取热门无人机
         hot_drones = self.app.drone_manager.get_hot(limit=4)
 
@@ -123,7 +121,6 @@ class ViewBuilder:
             header,
             search_bar,
             ft.Container(height=10),
-            categories,
             ft.Container(
                 content=ft.Text("推荐机型", size=18, weight="bold"),
                 padding=ft.Padding.symmetric(horizontal=20)
@@ -763,6 +760,257 @@ class ViewBuilder:
             ),
         ], expand=True)
 
+    def build_privacy_settings(self):
+        """隐私设置页面"""
+
+        def show_document(title, filename):
+            content = FileReader.read_txt(filename)
+
+            def close_dialog():
+                dialog.open = False
+                self.app.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text(title, weight="bold"),
+                content=ft.Container(
+                    content=ft.Text(content, selectable=True),
+                    width=500,
+                    height=400,
+                    padding=20,
+                ),
+                actions=[ft.TextButton("关闭", on_click=close_dialog)],
+                scrollable=True,
+            )
+            self.app.page.overlay.append(dialog)
+            dialog.open = True
+            self.app.page.update()
+
+        def show_delete_dialog():
+            def on_confirm():
+                phone = self.app.config.get("last_user")
+                self.app.user_manager.delete(phone)
+                self.app.config.logout()
+                confirm_dialog.open = False
+                self.app.page.update()
+                self.goto("profile")
+
+            def on_cancel():
+                confirm_dialog.open = False
+                self.app.page.update()
+
+            confirm_dialog = ft.AlertDialog(
+                title=ft.Text("删除账号", weight="bold"),
+                content=ft.Text("此操作不可逆，账号及所有数据将被永久删除，确认继续？"),
+                actions=[
+                    ft.TextButton("取消", on_click=on_cancel),
+                    ft.Button(
+                        "确认删除",
+                        bgcolor=ft.Colors.RED_400,
+                        color=ft.Colors.WHITE,
+                        on_click=on_confirm,
+                    ),
+                ],
+            )
+            self.app.page.overlay.append(confirm_dialog)
+            confirm_dialog.open = True
+            self.app.page.update()
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("隐私设置", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+
+                    # ========== 隐私说明 ==========
+                    ft.Container(
+                        content=ft.Text("隐私说明", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=5, top=20, bottom=10),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.PRIVACY_TIP_OUTLINED),
+                        title=ft.Text("隐私政策"),
+                        subtitle=ft.Text("了解我们如何收集和使用您的数据"),
+                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+                        on_click=lambda: show_document("隐私政策", "privacy_policy_text.txt"),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.DESCRIPTION_OUTLINED),
+                        title=ft.Text("用户协议"),
+                        subtitle=ft.Text("查看用户服务协议"),
+                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+                        on_click=lambda: show_document("用户协议", "user_agreement_text.txt"),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.ADMIN_PANEL_SETTINGS_OUTLINED),
+                        title=ft.Text("应用权限说明"),
+                        subtitle=ft.Text("定位、存储等权限的使用说明"),
+                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+                        on_click=lambda: show_document("应用权限说明", "app_permission_text.txt"),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.CHILD_CARE),
+                        title=ft.Text("未成年人保护"),
+                        subtitle=ft.Text("未成年人使用须知"),
+                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+                        on_click=lambda: show_document("未成年人保护", "minor_protection_text.txt"),
+                    ),
+
+                    # ========== 账号与数据 ==========
+                    ft.Container(
+                        content=ft.Text("账号与数据", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=5, top=25, bottom=10),
+                    ),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.DELETE_FOREVER_OUTLINED, color=ft.Colors.RED_400),
+                        title=ft.Text("删除账号", color=ft.Colors.RED_400),
+                        subtitle=ft.Text("永久删除账号及所有数据"),
+                        trailing=ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+                        on_click=show_delete_dialog,
+                    ),
+
+                ], scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=ft.Padding.symmetric(horizontal=20),
+            ),
+        ], expand=True)
+
+    def build_help_center(self):
+        """帮助中心页面"""
+
+        faqs = [
+            {
+                "question": "如何租赁无人机？",
+                "answer": "在首页选择心仪的无人机型号，点击立即租赁，填写收货地址和租赁时长，完成支付后无人机将从就近机库配送到您指定的地址。"
+            },
+            {
+                "question": "租赁费用如何计算？",
+                "answer": "租赁费用按天计算，不同机型价格不同。订单确认后费用将一次性扣除，超时使用将按小时补收费用。"
+            },
+            {
+                "question": "如何归还无人机？",
+                "answer": "租赁到期前，您可以在订单页面申请上门回收，无人机将自动飞回就近机库。请确保设备电量不低于20%。"
+            },
+            {
+                "question": "设备损坏怎么办？",
+                "answer": "如因正常使用造成损坏，请在订单页面提交报修申请，我们将安排检测。人为损坏将根据损坏程度收取相应赔偿费用。"
+            },
+            {
+                "question": "哪些区域禁止飞行？",
+                "answer": "机场净空区、军事禁区、政府机关上空等敏感区域禁止飞行。飞行高度一般不超过120米。请在飞行前查阅当地法规，违规飞行责任自负。"
+            },
+            {
+                "question": "如何申请退款？",
+                "answer": "租赁开始前可申请全额退款。租赁开始后如遇设备故障，可申请部分退款。请在订单页面提交退款申请，客服将在1-3个工作日内处理。"
+            },
+            {
+                "question": "忘记密码怎么办？",
+                "answer": "在登录页面点击忘记密码，通过绑定手机号验证身份后即可重置密码。"
+            }
+        ]
+
+        def build_faq_item(faq):
+            expanded = {"value": False}
+            answer_container = ft.Container(
+                content=ft.Text(faq["answer"], size=13, color=ft.Colors.GREY_700),
+                padding=ft.Padding(15, 0, 15, 15),
+                visible=False,
+            )
+            chevron = ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400, size=20)
+
+            def on_toggle(e):
+                expanded["value"] = not expanded["value"]
+                answer_container.visible = expanded["value"]
+                chevron.name = ft.Icons.EXPAND_LESS if expanded["value"] else ft.Icons.CHEVRON_RIGHT
+                self.app.page.update()
+
+            return ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.HELP_OUTLINE, color=ft.Colors.BLUE, size=18),
+                            ft.Text(faq["question"], size=14, weight="bold", expand=True),
+                            chevron,
+                        ], spacing=10),
+                        padding=ft.Padding(15, 12, 15, 12),
+                        on_click=on_toggle,
+                        ink=True,
+                    ),
+                    answer_container,
+                ], spacing=0),
+                bgcolor=ft.Colors.WHITE,
+                border_radius=12,
+                shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+            )
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("settings")),
+                    ft.Text("帮助中心", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+
+                    # ========== 常见问题 ==========
+                    ft.Container(
+                        content=ft.Text("常见问题", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=5, top=10, bottom=10),
+                    ),
+                    ft.Column([
+                        build_faq_item(faq) for faq in faqs
+                    ], spacing=10),
+
+                    # ========== 联系客服 ==========
+                    ft.Container(
+                        content=ft.Text("联系客服", size=16, weight="bold", color=ft.Colors.BLUE_700),
+                        padding=ft.Padding.only(left=5, top=25, bottom=10),
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Icon(ft.Icons.PHONE_OUTLINED, color=ft.Colors.BLUE, size=20),
+                                ft.Text("客服电话", size=14, color=ft.Colors.GREY_700, width=80),
+                                ft.Text("400-888-9999", size=14, weight="bold"),
+                            ], spacing=10),
+                            ft.Divider(height=1, color=ft.Colors.GREY_200),
+                            ft.Row([
+                                ft.Icon(ft.Icons.EMAIL_OUTLINED, color=ft.Colors.BLUE, size=20),
+                                ft.Text("客服邮箱", size=14, color=ft.Colors.GREY_700, width=80),
+                                ft.Text("support@dronegoo.com", size=14, weight="bold"),
+                            ], spacing=10),
+                            ft.Divider(height=1, color=ft.Colors.GREY_200),
+                            ft.Row([
+                                ft.Icon(ft.Icons.ACCESS_TIME, color=ft.Colors.BLUE, size=20),
+                                ft.Text("服务时间", size=14, color=ft.Colors.GREY_700, width=80),
+                                ft.Text("每日 09:00 - 21:00", size=14, weight="bold"),
+                            ], spacing=10),
+                        ], spacing=12),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=20),
+                ], scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=ft.Padding.symmetric(horizontal=20),
+            ),
+        ], expand=True)
+
     def build_settings(self):
         """构建设置页"""
         return ft.Column([
@@ -818,13 +1066,16 @@ class ViewBuilder:
                         leading=ft.Icon(ft.Icons.NOTIFICATIONS_OUTLINED),
                         title=ft.Text("租赁通知"),
                         subtitle=ft.Text("到期提醒、订单状态"),
-                        trailing=ft.Switch(value=True),
+                        trailing=ft.Switch(
+                            value=self.app.config.get("notify_enabled"),
+                            on_change=lambda e: self.app.config.set("notify_enabled", e.control.value)
+                            )
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.HISTORY),
                         title=ft.Text("租赁记录"),
                         subtitle=ft.Text("查看历史租赁订单"),
-                        on_click=lambda: self.goto("orders")  # 直接跳到订单页
+                        on_click=lambda: self.goto("orders")
                     ),
 
                     # ==================== 其他设置 ====================
@@ -842,13 +1093,13 @@ class ViewBuilder:
                         leading=ft.Icon(ft.Icons.PRIVACY_TIP_OUTLINED),
                         title=ft.Text("隐私设置"),
                         subtitle=ft.Text("数据使用与权限"),
-                        on_click=lambda: print("隐私设置")
+                        on_click=lambda: self.goto("privacy_settings")
                     ),
                     ft.ListTile(
                         leading=ft.Icon(ft.Icons.HELP_OUTLINE),
                         title=ft.Text("帮助中心"),
                         subtitle=ft.Text("常见问题与客服"),
-                        on_click=lambda: print("帮助中心")
+                        on_click=lambda: self.goto("help_center")
                     ),
                 ], scroll=ft.ScrollMode.AUTO),
                 expand=True,
@@ -886,7 +1137,7 @@ class ViewBuilder:
                 ], spacing=2, expand=True),
                 ft.IconButton(
                     icon=ft.Icons.SETTINGS,
-                    on_click=lambda: self.goto("settings"),
+                    on_click=lambda _, is_logged_in=is_logged_in: self.goto("settings") if is_logged_in else self.show_snackbar("请先登录", ft.Colors.RED_400),
                 ),
             ]),
             bgcolor=ft.Colors.BLUE_50,
@@ -935,6 +1186,143 @@ class ViewBuilder:
             settings_section,
             logout_section,
         ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
+
+    def build_forget(self):
+        """忘记密码页面"""
+        phone_field = ft.TextField(
+            label="手机号",
+            hint_text="请输入注册手机号",
+            prefix_icon=ft.Icons.PHONE,
+            border_radius=10,
+            width=350,
+            keyboard_type=ft.KeyboardType.PHONE,
+        )
+
+        new_password_field = ft.TextField(
+            label="新密码",
+            hint_text="请输入新密码（至少6位）",
+            prefix_icon=ft.Icons.LOCK,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+            visible=False,
+        )
+
+        confirm_password_field = ft.TextField(
+            label="确认新密码",
+            hint_text="请再次输入新密码",
+            prefix_icon=ft.Icons.LOCK_OUTLINE,
+            password=True,
+            can_reveal_password=True,
+            border_radius=10,
+            width=350,
+            visible=False,
+        )
+
+        verified = False
+        def on_submit():
+            nonlocal verified
+            if not verified:
+                # 第一步：验证手机号
+                phone = phone_field.value
+                if not phone:
+                    self.show_snackbar("请输入手机号", ft.Colors.RED_400)
+                    return
+
+                phone_pattern = r"^1[3-9]\d{9}$"
+                if not re.match(phone_pattern, phone):
+                    self.show_snackbar("请输入正确的11位手机号码", ft.Colors.RED_400)
+                    return
+
+                if not self.app.user_manager.contains(phone):
+                    self.show_snackbar("该手机号未注册", ft.Colors.RED_400)
+                    return
+
+                # 验证通过，展示密码输入框
+                verified = True
+                phone_field.read_only = True
+                new_password_field.visible = True
+                confirm_password_field.visible = True
+                submit_btn.content = "确认重置"
+                self.app.page.update()
+
+            else:
+                # 第二步：重置密码
+                new_pwd = new_password_field.value
+                confirm = confirm_password_field.value
+                phone = phone_field.value
+
+                if not new_pwd:
+                    self.show_snackbar("请输入新密码", ft.Colors.RED_400)
+                    return
+
+                if len(new_pwd) < 6:
+                    self.show_snackbar("新密码至少需要6位", ft.Colors.RED_400)
+                    return
+
+                if new_pwd != confirm:
+                    self.show_snackbar("两次输入的密码不一致", ft.Colors.RED_400)
+                    return
+
+                self.app.user_manager.update_password(phone, new_pwd)
+                self.show_snackbar("密码重置成功，请重新登录", ft.Colors.GREEN_400)
+                self.goto("login")
+
+        submit_btn = ft.Button(
+            "验证手机号",
+            width=350, height=55,
+            bgcolor=ft.Colors.BLUE, color=ft.Colors.WHITE,
+            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+            on_click=on_submit
+        )
+
+        return ft.Container(
+            content=ft.Column([
+                # 顶部栏
+                ft.Container(
+                    content=ft.Row([
+                        ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("login")),
+                        ft.Text("忘记密码", size=20, weight="bold"),
+                    ]),
+                    padding=ft.Padding.only(left=10, right=20, top=20, bottom=10),
+                ),
+
+                ft.Container(
+                    content=ft.Column([
+                        ft.Container(
+                            content=ft.Icon(ft.Icons.LOCK_RESET, size=80, color=ft.Colors.BLUE),
+                            alignment=ft.Alignment.CENTER,
+                        ),
+
+                        ft.Container(height=20),
+
+                        ft.Text("重置密码", size=24, weight="bold", text_align=ft.TextAlign.CENTER),
+                        ft.Text(
+                            "验证注册手机号后即可设置新密码",
+                            size=14, color=ft.Colors.GREY_600,
+                            text_align=ft.TextAlign.CENTER,
+                        ),
+
+                        ft.Container(height=30),
+
+                        phone_field,
+                        ft.Container(height=10),
+                        new_password_field,
+                        ft.Container(height=10),
+                        confirm_password_field,
+
+                        ft.Container(height=30),
+
+                        submit_btn,
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, scroll=ft.ScrollMode.AUTO),
+                    expand=True,
+                    padding=20,
+                ),
+            ], spacing=0),
+            expand=True,
+            bgcolor=ft.Colors.WHITE,
+        )
 
     def build_login(self):
         """构建登录页面"""
@@ -1493,23 +1881,6 @@ class ViewBuilder:
             main_content,
             bottom_bar,
         ], spacing=0, expand=True)
-
-    # --- 组件工厂方法 ---
-    def _category_item(self, icon, name):
-        def on_category_click(name):
-            print(f"分类: {name}")
-
-        return ft.Container(
-            content=ft.Column([
-                ft.Text(icon, size=25),
-                ft.Text(name, size=12, weight=ft.FontWeight.W_500),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-            on_click=lambda: on_category_click(name),
-            padding=10,
-            width=80,
-            border_radius=10,
-            ink=True,
-        )
 
     def _drone_card(self, drone_id, name, price, tag, specs):
         return ft.Container(

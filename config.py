@@ -6,6 +6,7 @@ class Config:
         self.CONFIG = {
             "agreed": False,        # 用户协议
             "language": "zh_CN",    # 语言
+            "notify_enabled": True, # 提醒功能
             "last_user": ""         # 最后登录手机号
         }
 

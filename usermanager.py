@@ -54,6 +54,10 @@ class UserManager:
         }
         self.save()
 
+    def delete(self, phone: str):
+        self.users.pop(phone)
+        self.save()
+
     def update_value(self, phone_number, nick_name, gender, birthday):
         """更新除密码外的值"""
         self.users[phone_number]["nick_name"] = nick_name

@@ -6,13 +6,6 @@
         "birthday": "2005-09-19",
         "addresses": []
     },
-    "15616131369": {
-        "nick_name": "\u7528\u623715616131369",
-        "password": "a3051f9f6541aff999dce8657839153d07866953b15684eb671c9c0fb4507367",
-        "gender": "\u4fdd\u5bc6",
-        "birthday": "",
-        "addresses": []
-    },
     "19257413908": {
         "nick_name": "aq",
         "password": "a3051f9f6541aff999dce8657839153d07866953b15684eb671c9c0fb4507367",
@@ -28,5 +21,11 @@
                 "address": "\u9655\u897f\u7701\u897f\u5b89\u5e02\u705e\u6865\u533a\u7530\u738b(\u5730\u94c1\u7ad9) 9\u53f7\u7ebf"
             }
         ]
+    },
+    "15616131369": {
+        "nick_name": "\u7528\u623715616131369",
+        "password": "a3051f9f6541aff999dce8657839153d07866953b15684eb671c9c0fb4507367",
+        "gender": "\u7537",
+        "birthday": "2026-05-03"
     }
 }
