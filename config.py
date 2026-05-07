@@ -12,7 +12,6 @@ class Config:
 
         user_data = FileReader.read_json(self.FILE)
         self.CONFIG.update(user_data)
-        self.save()
 
     def get(self, key: str):
         """安全获取配置项"""
