@@ -1,6 +1,5 @@
 import re
 import sys
-from tkinter import NO
 import aiohttp
 import asyncio
 import keyvals
