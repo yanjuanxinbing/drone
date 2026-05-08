@@ -16,7 +16,7 @@ class ViewBuilder:
     def __init__(self, app: App):
         self.app = app
 
-    def goto(self, name, drone_id=None, keyword=None, is_booking=False, selected_address=None):
+    def goto(self, name, drone_id=None, keyword=None, is_booking=False, selected_address=None, order_id=None, selected_index=None):
         """通用页面跳转"""
         self.app.page.controls.clear()
 
@@ -27,7 +27,9 @@ class ViewBuilder:
                 view = self.build_home()
             case "orders":
                 nav.selected_index = 1
-                view = self.build_orders()
+                view = self.build_orders(selected_index)
+            case "order_detail":
+                view = self.build_order_detail(order_id)
             case "profile":
                 nav.selected_index = 2
                 view = self.build_profile()
@@ -243,16 +245,429 @@ class ViewBuilder:
             ft.Container(content=drone_grid, padding=20, expand=True),
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-    def build_orders(self):
-        """构建订单页"""
+    def build_order_card(self, phone, order, refresh):
+        status_color = {
+            "待配送": ft.Colors.ORANGE,
+            "租赁中": ft.Colors.BLUE,
+            "已完成": ft.Colors.GREEN,
+            "已取消": ft.Colors.GREY_500
+        }
+
+        def on_cancel():
+            def confirm_cancel():
+                self.app.user_manager.update_order_status(phone, order["id"], "已取消")
+                dialog.open = False
+                refresh()
+
+            def on_close():
+                dialog.open = False
+                self.app.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("取消订单", weight="bold"),
+                content=ft.Text("确认取消该订单？此操作不可撤销。"),
+                actions=[
+                    ft.TextButton("返回", on_click=on_close),
+                    ft.Button(
+                        "确认取消",
+                        bgcolor=ft.Colors.RED_400,
+                        color=ft.Colors.WHITE,
+                        on_click=confirm_cancel,
+                    ),
+                ],
+            )
+            self.app.page.overlay.append(dialog)
+            dialog.open = True
+            self.app.page.update()
+
         return ft.Container(
             content=ft.Column([
-                ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=100, color=ft.Colors.GREY_400),
-                ft.Text("订单页面", size=20, weight="bold"),
-                ft.Text("暂无订单", size=14, color=ft.Colors.GREY_600),
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
-            expand=True,
+                # 顶部：机型 + 状态
+                ft.Row([
+                    ft.Text(order["drone_name"], size=15, weight="bold", expand=True),
+                    ft.Container(
+                        content=ft.Text(
+                            order["status"], size=12, color=ft.Colors.WHITE,
+                        ),
+                        bgcolor=status_color[order["status"]],
+                        padding=ft.Padding.symmetric(vertical=3, horizontal=10),
+                        border_radius=12,
+                    ),
+                ]),
+                ft.Divider(height=10, color=ft.Colors.GREY_200),
+                # 中部：时间和地址
+                ft.Row([
+                    ft.Icon(ft.Icons.ACCESS_TIME, size=14, color=ft.Colors.GREY_500),
+                    ft.Text(
+                        f"{order['start_time']} → {order['end_time']}",
+                        size=12, color=ft.Colors.GREY_600,
+                    ),
+                ], spacing=6),
+                ft.Row([
+                    ft.Icon(ft.Icons.LOCATION_ON, size=14, color=ft.Colors.GREY_500),
+                    ft.Text(order["address"], size=12, color=ft.Colors.GREY_600, expand=True, max_lines=1),
+                ], spacing=6),
+                ft.Divider(height=10, color=ft.Colors.GREY_200),
+                # 底部：费用 + 操作
+                ft.Row([
+                    ft.Text(f"¥{order['total_price']}", size=18,
+                            color=ft.Colors.RED_700, weight="bold", expand=True),
+                    ft.TextButton(
+                        "取消订单",
+                        on_click=on_cancel,
+                        style=ft.ButtonStyle(color=ft.Colors.RED_400),
+                        visible=order.get("status") == "待配送",
+                    ),
+                    ft.TextButton(
+                        "查看详情",
+                        on_click=lambda _, oid=order["id"]: self.goto("order_detail", order_id=oid),
+                        style=ft.ButtonStyle(color=ft.Colors.BLUE),
+                    ),
+                ]),
+            ], spacing=6),
+            padding=20,
+            bgcolor=ft.Colors.WHITE,
+            border_radius=12,
+            shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
         )
+
+    def build_tab_content(self, phone, status, refresh):
+        orders = [o for o in self.app.user_manager.get_orders(phone) if o.get("status") == status]
+
+        if not orders:
+            return ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=80, color=ft.Colors.GREY_400),
+                    ft.Text("暂无订单", size=16, color=ft.Colors.GREY_600)
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER),
+                expand=True
+            )
+
+        return ft.Column([
+            self.build_order_card(phone, o, refresh) for o in reversed(orders)
+        ], spacing=12, scroll=ft.ScrollMode.AUTO)
+
+    def build_orders(self, selected_index=None):
+        """构建订单页"""
+        phone = self.app.config.get("last_user")
+
+        if not phone:
+            return ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.RECEIPT_LONG_OUTLINED, size=100, color=ft.Colors.GREY_400),
+                    ft.Text("请先登录", size=20, weight="bold"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER),
+                expand=True,
+            )
+
+        tabs_container = ft.Container(expand=True)
+
+        def refresh():
+            tabs_container.content = build_tabs()
+            self.app.page.update()
+
+        selected_index = selected_index or 0
+        def build_tabs():
+            tab_labels = ["租赁中", "待配送", "已结束", "已取消"]
+            tab_contents = [self.build_tab_content(phone, label, refresh) for label in tab_labels]
+
+            def build_tab_row():
+                def on_tab_click(idx):
+                    nonlocal selected_index
+                    selected_index = idx
+                    tab_bar.content = build_tab_row()
+                    content_container.content = tab_contents[idx]
+                    tab_bar.update()
+                    content_container.update()
+
+                return ft.Row([
+                    ft.Container(
+                        content=ft.Text(
+                            label,
+                            size=14,
+                            weight="bold" if i == selected_index else "normal",
+                            color=ft.Colors.BLUE if i == selected_index else ft.Colors.GREY_600,
+                        ),
+                        padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+                        border=ft.Border(
+                            bottom=ft.BorderSide(
+                                2, ft.Colors.BLUE if i == selected_index else ft.Colors.TRANSPARENT
+                            )
+                        ),
+                        on_click=lambda _, idx=i: on_tab_click(idx),
+                        ink=True,
+                    )
+                    for i, label in enumerate(tab_labels)
+                ], spacing=0)
+
+            tab_bar = ft.Container(
+                content=build_tab_row(),
+                bgcolor=ft.Colors.WHITE,
+                shadow=ft.BoxShadow(blur_radius=4, color=ft.Colors.BLACK_12, offset=ft.Offset(0, 2)),
+            )
+
+            content_container = ft.Container(
+                content=tab_contents[selected_index],
+                expand=True,
+                padding=ft.Padding.symmetric(horizontal=15, vertical=15),
+            )
+
+            return ft.Column([
+                tab_bar,
+                content_container,
+            ], expand=True, spacing=0)
+
+        refresh()
+
+        return ft.Column([
+            ft.Container(
+                content=ft.Text("我的订单", size=20, weight="bold"),
+                padding=ft.Padding(20, 25, 20, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+            tabs_container,
+        ], expand=True, spacing=0)
+
+    def build_order_detail(self, order_id: str):
+        """订单详情页"""
+        phone = self.app.config.get("last_user")
+        order = self.app.user_manager.get_order_by_id(phone, order_id)
+
+        if not order:
+            return ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color=ft.Colors.GREY_400),
+                    ft.Text("订单不存在", size=20, weight="bold"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER),
+                expand=True,
+            )
+
+        drone = self.app.drone_manager.get_by_id(order["drone_id"])
+
+        status_color = {
+            "待配送": ft.Colors.ORANGE,
+            "租赁中": ft.Colors.BLUE,
+            "已完成": ft.Colors.GREEN,
+            "已取消": ft.Colors.GREY_500
+        }
+
+        status_icon = {
+            "待配送": ft.Icons.LOCAL_SHIPPING_OUTLINED,
+            "租赁中": ft.Icons.FLIGHT,
+            "已完成": ft.Icons.CHECK_CIRCLE_OUTLINE,
+            "已取消": ft.Icons.CANCEL_OUTLINED
+        }
+
+        # 状态时间轴
+        all_statuses = ["待配送", "租赁中", "已完成"]
+        current = order.get("status")
+
+        def build_timeline():
+            if current == "已取消":
+                return ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.CANCEL_OUTLINED, color=ft.Colors.RED_400, size=20),
+                        ft.Text("订单已取消", size=14, color=ft.Colors.RED_400),
+                    ], spacing=8),
+                    padding=ft.Padding.symmetric(vertical=10),
+                )
+
+            nodes = []
+            for i, s in enumerate(all_statuses):
+                is_done = all_statuses.index(current) >= i if current in all_statuses else False
+                nodes.append(
+                    ft.Column([
+                        ft.Container(
+                            content=ft.Icon(
+                                ft.Icons.CHECK_CIRCLE if is_done else ft.Icons.RADIO_BUTTON_UNCHECKED,
+                                color=ft.Colors.BLUE if is_done else ft.Colors.GREY_400,
+                                size=20,
+                            ),
+                        ),
+                        ft.Text(s, size=11,
+                                color=ft.Colors.BLUE if is_done else ft.Colors.GREY_400),
+                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4)
+                )
+                if i < len(all_statuses) - 1:
+                    nodes.append(
+                        ft.Container(
+                            width=50, height=2,
+                            bgcolor=ft.Colors.BLUE if all_statuses.index(current) > i else ft.Colors.GREY_300,
+                            margin=ft.Margin.only(bottom=18),
+                        )
+                    )
+
+            return ft.Row(nodes, alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def on_cancel():
+            def confirm_cancel():
+                self.app.user_manager.update_order_status(phone, order_id, "已取消")
+                dialog.open = False
+                self.goto("order_detail", order_id=order_id)
+
+            def on_close():
+                dialog.open = False
+                self.app.page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("取消订单", weight="bold"),
+                content=ft.Text("确认取消该订单？此操作不可撤销。"),
+                actions=[
+                    ft.TextButton("返回", on_click=on_close),
+                    ft.Button(
+                        "确认取消",
+                        bgcolor=ft.Colors.RED_400,
+                        color=ft.Colors.WHITE,
+                        on_click=confirm_cancel,
+                    ),
+                ],
+            )
+            self.app.page.overlay.append(dialog)
+            dialog.open = True
+            self.app.page.update()
+
+        def info_row(icon, label, value):
+            return ft.Row([
+                ft.Icon(icon, size=16, color=ft.Colors.GREY_500),
+                ft.Text(label, size=13, color=ft.Colors.GREY_600, width=70),
+                ft.Text(value, size=13, expand=True),
+            ], spacing=10)
+
+        statuses = ["租赁中", "待配送", "已完成", "已取消"]
+
+        return ft.Column([
+            # 顶部栏
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda: self.goto("orders", selected_index=statuses.index(current))),
+                    ft.Text("订单详情", size=20, weight="bold", expand=True),
+                ]),
+                padding=ft.Padding(15, 20, 15, 15),
+                bgcolor=ft.Colors.WHITE,
+            ),
+
+            ft.Container(
+                content=ft.Column([
+
+                    # ========== 状态卡片 ==========
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Row([
+                                ft.Icon(
+                                    status_icon.get(current, ft.Icons.INFO),
+                                    color=status_color.get(current, ft.Colors.GREY_400),
+                                    size=28,
+                                ),
+                                ft.Column([
+                                    ft.Text(current, size=18, weight="bold",
+                                            color=status_color.get(current, ft.Colors.GREY_400)),
+                                    ft.Text(f"订单号：{order['id']}", size=11, color=ft.Colors.GREY_500),
+                                ], spacing=2, expand=True),
+                            ], spacing=12),
+                            ft.Container(height=15),
+                            build_timeline()
+                        ]),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=15),
+
+                    # ========== 机型信息 ==========
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Container(
+                                content=ft.Text(drone["images"][0] if drone else "🚁", size=50),
+                                width=80, height=80,
+                                bgcolor=ft.Colors.BLUE_50,
+                                border_radius=12,
+                                alignment=ft.Alignment.CENTER,
+                            ),
+                            ft.Column([
+                                ft.Text(order["drone_name"], size=16, weight="bold"),
+                                ft.Text(drone["specs"] if drone else "", size=13, color=ft.Colors.GREY_600),
+                            ], spacing=4, expand=True),
+                        ], spacing=15),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=15),
+
+                    # ========== 租赁信息 ==========
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("租赁信息", size=15, weight="bold"),
+                            ft.Container(height=10),
+                            info_row(ft.Icons.LOCATION_ON, "收货地址", order["address"]),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
+                            info_row(ft.Icons.PLAY_CIRCLE_OUTLINE, "开始时间", order["start_time"]),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
+                            info_row(ft.Icons.STOP_CIRCLE_OUTLINED, "结束时间", order["end_time"]),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
+                            info_row(ft.Icons.TIMER_OUTLINED, "租赁时长",
+                                    f"{order['duration']} 小时"),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
+                            info_row(ft.Icons.CALENDAR_TODAY, "下单时间", order["created_at"]),
+                        ]),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=15),
+
+                    # ========== 费用明细 ==========
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("费用明细", size=15, weight="bold"),
+                            ft.Container(height=10),
+                            ft.Row([
+                                ft.Text("租赁费用", size=14, color=ft.Colors.GREY_600, expand=True),
+                                ft.Text(f"¥{order['total_price']}", size=14),
+                            ]),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
+                            ft.Row([
+                                ft.Text("实付金额", size=15, weight="bold", expand=True),
+                                ft.Text(f"¥{order['total_price']}", size=20,
+                                        color=ft.Colors.RED_700, weight="bold"),
+                            ]),
+                        ]),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=25),
+
+                    # ========== 取消按钮 ==========
+                    ft.Button(
+                        "取消订单",
+                        width=float("inf"),
+                        height=55,
+                        bgcolor=ft.Colors.RED_400,
+                        color=ft.Colors.WHITE,
+                        on_click=on_cancel,
+                        visible=current == "待配送",
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+                    ),
+
+                    ft.Container(height=10),
+
+                ], scroll=ft.ScrollMode.AUTO),
+                expand=True,
+                padding=20,
+            ),
+        ], expand=True)
 
     def build_personal_info(self):
         """个人信息编辑页面"""
@@ -1919,7 +2334,12 @@ class ViewBuilder:
         )
 
         def update_start_field():
-            dt = datetime.datetime.combine(date_picker.value.astimezone(), time_picker.value)
+            dt = datetime.datetime.combine(date_picker.value.astimezone(), time_picker.value).astimezone()
+            now = datetime.datetime.now().astimezone()
+
+            if dt < now:
+                dt = now
+
             start_field.value = dt.strftime("%Y-%m-%d %H:%M")
             start_field.update()
 
@@ -1994,7 +2414,7 @@ class ViewBuilder:
 
             self.app.user_manager.add_order(phone, order)
             self.show_snackbar("下单成功！", ft.Colors.GREEN_400)
-            self.goto("orders")
+            self.goto("orders", selected_index=1)
 
         return ft.Column([
             # 顶部栏
