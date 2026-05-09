@@ -18,23 +18,30 @@ class UserManager:
     def get_addresses(self, phone: str) -> list:
         return self.get(phone).get("addresses")
 
-    def add_address(self, phone: str, address: str):
+    def get_location_by_address(self, phone: str, address: str) -> str:
+        for a in self.get_addresses(phone):
+            if a["address"] == address:
+                return a["location"]
+
+    def add_address(self, phone: str, address: str, location: str):
         addresses = self.get_addresses(phone)
         new_id = str(int(addresses[-1]["id"]) + 1) if addresses else "1"
-        addresses.append({"id": new_id, "address": address})
+        addresses.append({"id": new_id, "address": address, "location": location})
         self.save()
 
-    def update_address(self, phone: str, addr_id: str, new_address: str):
+    def update_address(self, phone: str, addr_id: str, address: str, location: str):
         for addr in self.get_addresses(phone):
             if addr["id"] == addr_id:
-                addr["address"] = new_address
+                addr["address"] = address
+                addr["locaton"] = location
                 self.save()
                 return
-            
+
     def set_default_address(self, phone: str, addr_id: str):
         addresses = self.get_addresses(phone)
         idx = next((i for i, a in enumerate(addresses) if a["id"] == addr_id), None)
         addresses[0]["address"], addresses[idx]["address"] = addresses[idx]["address"], addresses[0]["address"]
+        addresses[0]["location"], addresses[idx]["location"] = addresses[idx]["location"], addresses[0]["location"]
         self.save()
 
     def delete_address(self, phone: str, addr_id: str):

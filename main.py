@@ -7,6 +7,7 @@ import datetime
 import flet as ft
 from config import Config
 import flet_geolocator as ftg
+from geopy.distance import geodesic
 from usermanager import UserManager
 from dronemanager import DroneManager
 from file import FileReader, FileWriter
@@ -16,7 +17,7 @@ class ViewBuilder:
     def __init__(self, app: App):
         self.app = app
 
-    def goto(self, name, drone_id=None, keyword=None, is_booking=False, selected_address=None, order_id=None, selected_index=None):
+    def goto(self, name, drone_id=None, keyword=None, is_booking=False, selected_address=None, start_address=None, is_start=False, order_id=None, selected_index=None):
         """通用页面跳转"""
         self.app.page.controls.clear()
 
@@ -42,7 +43,7 @@ class ViewBuilder:
             case "drone":
                 view = self.build_drone_detail(drone_id)
             case "order":
-                view = self.build_order(drone_id, is_booking, selected_address)
+                view = self.build_order(drone_id, is_booking, selected_address, start_address)
             case "search":
                 view = self.build_search(keyword)
             case "settings":
@@ -60,7 +61,7 @@ class ViewBuilder:
             case "help_center":
                 view = self.build_help_center()
             case "address_picker":
-                view = self.build_address_picker(drone_id, is_booking)
+                view = self.build_address_picker(drone_id, is_booking, selected_address, start_address, is_start)
             case _:
                 print(f"未知路由: {name}")
                 return
@@ -227,7 +228,7 @@ class ViewBuilder:
                 self.build_card(
                     drone_id=drone["id"],
                     name=drone["name"],
-                    price=str(drone["price"]),
+                    price=str(f"{drone["price"] / 100.0}/千米"),
                     tag=drone["tag"],
                     specs=drone["specs"]
                 ) for drone in hot_drones
@@ -299,9 +300,13 @@ class ViewBuilder:
                 ft.Row([
                     ft.Icon(ft.Icons.ACCESS_TIME, size=14, color=ft.Colors.GREY_500),
                     ft.Text(
-                        f"{order['start_time']} → {order['end_time']}",
+                        f"{order['start_time']}",
                         size=12, color=ft.Colors.GREY_600,
                     ),
+                ], spacing=6),
+                ft.Row([
+                    ft.Icon(ft.Icons.LOCATION_ON, size=14, color=ft.Colors.GREY_500),
+                    ft.Text(order["start_address"], size=12, color=ft.Colors.GREY_600, expand=True, max_lines=1),
                 ], spacing=6),
                 ft.Row([
                     ft.Icon(ft.Icons.LOCATION_ON, size=14, color=ft.Colors.GREY_500),
@@ -606,14 +611,11 @@ class ViewBuilder:
                         content=ft.Column([
                             ft.Text("租赁信息", size=15, weight="bold"),
                             ft.Container(height=10),
+                            info_row(ft.Icons.LOCATION_ON, "装货地址", order["start_address"]),
+                            ft.Divider(height=12, color=ft.Colors.GREY_100),
                             info_row(ft.Icons.LOCATION_ON, "收货地址", order["address"]),
                             ft.Divider(height=12, color=ft.Colors.GREY_100),
                             info_row(ft.Icons.PLAY_CIRCLE_OUTLINE, "开始时间", order["start_time"]),
-                            ft.Divider(height=12, color=ft.Colors.GREY_100),
-                            info_row(ft.Icons.STOP_CIRCLE_OUTLINED, "结束时间", order["end_time"]),
-                            ft.Divider(height=12, color=ft.Colors.GREY_100),
-                            info_row(ft.Icons.TIMER_OUTLINED, "租赁时长",
-                                    f"{order['duration']} 小时"),
                             ft.Divider(height=12, color=ft.Colors.GREY_100),
                             info_row(ft.Icons.CALENDAR_TODAY, "下单时间", order["created_at"]),
                         ]),
@@ -1032,7 +1034,7 @@ class ViewBuilder:
             ),
         ], expand=True)
 
-    async def get_loaction(self) -> str:
+    async def get_current_loaction(self) -> str:
         gl = ftg.Geolocator()
         pos = await gl.get_current_position()
         lat, lng = pos.latitude, pos.longitude
@@ -1098,11 +1100,12 @@ class ViewBuilder:
         is_edit = existing is not None
 
         # 获取城市和坐标
-        location = await self.get_loaction()
+        location = await self.get_current_loaction()
         addr, citycode = await self.get_addr_citycode(location)
 
         tips_column = ft.Column([], spacing=0)
         debounce_task = None
+        selected_loaction = None
         async def on_input_change():
             tips_column.controls.clear()
 
@@ -1124,10 +1127,13 @@ class ViewBuilder:
                     name = tip.get("name", "")
                     district = tip.get("district", "")
                     address = tip.get("address", "")
+                    tip_location = tip.get("location")
                     full = f"{district}{name}" if not address else f"{district}{name} {address}"
 
-                    def on_tip_click(_, f=full):
+                    def on_tip_click(_, f=full, l=tip_location):
                         address_field.value = f
+                        nonlocal selected_loaction
+                        selected_loaction = tip_location
                         tips_column.controls.clear()
                         self.app.page.update()
 
@@ -1168,7 +1174,7 @@ class ViewBuilder:
                 self.app.user_manager.update_address(phone, existing["id"], address)
                 self.show_snackbar("地址已更新", ft.Colors.GREEN_400)
             else:
-                self.app.user_manager.add_address(phone, address)
+                self.app.user_manager.add_address(phone, address, selected_loaction)
                 self.show_snackbar("地址已添加", ft.Colors.GREEN_400)
 
             dialog.open = False
@@ -1221,7 +1227,7 @@ class ViewBuilder:
         dialog.open = True
         self.app.page.update()
 
-    def build_address_list(self, phone, refresh, drone_id=None, is_booking=False):
+    def build_address_list(self, phone, refresh, drone_id=None, is_booking=False, selected_address=None, start_address=None, is_start=False):
         addresses = self.app.user_manager.get_addresses(phone)
 
         def on_delete(addr_id):
@@ -1260,7 +1266,7 @@ class ViewBuilder:
                 bgcolor=ft.Colors.WHITE,
                 border_radius=12,
                 shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
-                on_click=lambda _, addr=addr["address"]: self.goto("order", drone_id=drone_id, is_booking=is_booking, selected_address=addr) if drone_id else None
+                on_click=lambda _, addr=addr["address"]: self.goto("order", drone_id=drone_id, is_booking=is_booking, selected_address=addr if not is_start else selected_address, start_address=addr if is_start else start_address) if drone_id else None
             )
             for index, addr in enumerate(addresses)
         ], spacing=12)
@@ -1662,7 +1668,7 @@ class ViewBuilder:
         user_card = ft.Container(
             content=ft.Row([
                 ft.Container(
-                    content=ft.Text("👤", size=40),
+                    content=ft.CircleAvatar(foreground_image_src=FileReader.read_img(f"{phone}.png"), radius=40),
                     width=70,
                     height=70,
                     bgcolor=ft.Colors.BLUE_100,
@@ -2220,14 +2226,14 @@ class ViewBuilder:
             bgcolor=ft.Colors.WHITE,
         )
 
-    def build_address_picker(self, drone_id: str, is_booking: bool):
+    def build_address_picker(self, drone_id: str, is_booking: bool, selected_address=None, start_address=None, is_start=False):
         """地址选择页"""
         phone = self.app.config.get("last_user")
 
         list_container = ft.Container(expand=True)
 
         def refresh():
-            list_container.content = self.build_address_list(phone, refresh, drone_id, is_booking)
+            list_container.content = self.build_address_list(phone, refresh, drone_id, is_booking, selected_address, start_address, is_start)
             self.app.page.update()
 
         refresh()
@@ -2238,7 +2244,7 @@ class ViewBuilder:
                 content=ft.Row([
                     ft.IconButton(
                         icon=ft.Icons.ARROW_BACK,
-                        on_click=lambda: self.goto("order", drone_id=drone_id, is_booking=is_booking),
+                        on_click=lambda: self.goto("order", drone_id=drone_id, is_booking=is_booking, selected_address=selected_address, start_address=start_address),
                     ),
                     ft.Text("选择地址", size=20, weight="bold", expand=True),
                     ft.IconButton(
@@ -2260,7 +2266,13 @@ class ViewBuilder:
             ),
         ], expand=True)
 
-    def build_order(self, drone_id: str, is_booking: bool = False, selected_address: str = None):
+    def calc_distance(self, loc1: str, loc2: str) -> float:
+        """计算两点直线距离（km），坐标格式 'lng,lat'"""
+        lng1, lat1 = map(float, loc1.split(","))
+        lng2, lat2 = map(float, loc2.split(","))
+        return geodesic((lat1, lng1), (lat2, lng2)).km
+
+    def build_order(self, drone_id: str, is_booking: bool = False, selected_address: str = None, start_address: str = None):
         """下单页"""
         drone = self.app.drone_manager.get_by_id(drone_id)
         phone = self.app.config.get("last_user")
@@ -2271,6 +2283,24 @@ class ViewBuilder:
             selected_address = addresses[0]["address"] if addresses else ""
 
         # --- 地址选择 ---
+        start_address_display = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.BLUE, size=20),
+                ft.Text(
+                    start_address or "请选择装货地址",
+                    size=14,
+                    expand=True,
+                    color=ft.Colors.BLACK if start_address else ft.Colors.GREY_400,
+                ),
+                ft.Icon(ft.Icons.CHEVRON_RIGHT, color=ft.Colors.GREY_400),
+            ]),
+            padding=ft.Padding(15, 12, 15, 12),
+            bgcolor=ft.Colors.GREY_100,
+            border_radius=10,
+            on_click=lambda: self.goto("address_picker", drone_id=drone_id, is_booking=is_booking, selected_address=selected_address, start_address=start_address, is_start=True),
+            ink=True
+        )
+
         address_display = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.LOCATION_ON, color=ft.Colors.BLUE, size=20),
@@ -2285,40 +2315,8 @@ class ViewBuilder:
             padding=ft.Padding(15, 12, 15, 12),
             bgcolor=ft.Colors.GREY_100,
             border_radius=10,
-            on_click=lambda: self.goto("address_picker", drone_id=drone_id, is_booking=is_booking),
+            on_click=lambda: self.goto("address_picker", drone_id=drone_id, is_booking=is_booking, selected_address=selected_address, start_address=start_address, is_start=False),
             ink=True
-        )
-
-        def update_price():
-            unit_price = drone["price"]
-            if duration_field.value:
-                total = round(unit_price / 24 * int(duration_field.value), 1)
-            else:
-                total = 0
-            price_text.value = f"¥{total}"
-            self.app.page.update()
-
-        def on_duration_change(e):
-            val = e.control.value
-            # 只保留数字
-            digits = ''.join(c for c in val if c.isdigit())
-            # 去掉前导零
-            if digits:
-                digits = str(int(digits))
-            if digits != val:
-                duration_field.value = digits
-                duration_field.update()
-
-            update_price()
-
-        duration_field = ft.TextField(
-            label="租赁时长",
-            value="1",
-            border_radius=10,
-            keyboard_type=ft.KeyboardType.NUMBER,
-            suffix=ft.Text("小时"),
-            on_change=on_duration_change,
-            width=350
         )
 
         # --- 预约时间（仅预约租赁显示）---
@@ -2375,37 +2373,62 @@ class ViewBuilder:
             ),
         ], spacing=0)
 
-        # --- 价格计算 ---
-        price_text = ft.Text("", size=22, color=ft.Colors.RED_700, weight="bold")
+        def get_price():
+            if start_address is not None and selected_address is not None:
+                if start_address == selected_address:
+                    return "装收货地址不应相同"
 
-        update_price()
+                start_location = self.app.user_manager.get_location_by_address(phone, start_address)
+                selected_location = self.app.user_manager.get_location_by_address(phone, selected_address)
+                unit_price = drone["price"]
+
+                dist = self.calc_distance(start_location, selected_location)
+                total = unit_price * dist / 100.0
+
+                if dist <= 3:
+                    base = 6
+                elif dist <= 6:
+                    base = 9
+                elif dist <= 10:
+                    base = 13
+                elif dist <= 15:
+                    base = 18
+                else:
+                    base = 30
+
+                return f"¥{(base + total):.2f}"
+
+            else:
+                return "¥待计算"
+
+        # --- 价格计算 ---
+        price_text = ft.Text(get_price(), size=22, color=ft.Colors.RED_700, weight="bold")
 
         # --- 下单 ---
         def on_submit():
+            if not start_address:
+                self.show_snackbar("请选择装货地址", ft.Colors.RED_400)
+                return
+
             if not selected_address:
                 self.show_snackbar("请选择收货地址", ft.Colors.RED_400)
                 return
-
-            if not duration_field.value:
-                self.show_snackbar("请输入有效的租赁时长", ft.Colors.RED_400)
+            
+            if start_address == selected_address:
+                self.show_snackbar("装货地址不应和收货地址相同", ft.Colors.RED_400)
                 return
 
             start = datetime.datetime.strptime(start_field.value, "%Y-%m-%d %H:%M")
-            delta = datetime.timedelta(hours=int(duration_field.value))
-            end = start + delta
-
-            unit_price = drone["price"]
-            total = round(unit_price / 24 * int(duration_field.value))
+            total = float(price_text.value[1:])
 
             order = {
                 "id": datetime.datetime.now().astimezone().strftime("%Y%m%d%H%M%S"),
                 "phone": phone,
                 "drone_id": drone["id"],
                 "drone_name": drone["name"],
+                "start_address": start_address,
                 "address": selected_address,
-                "duration": int(duration_field.value),
                 "start_time": start.strftime("%Y-%m-%d %H:%M"),
-                "end_time": end.strftime("%Y-%m-%d %H:%M"),
                 "total_price": total,
                 "status": "待配送",
                 "created_at": datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M"),
@@ -2448,7 +2471,7 @@ class ViewBuilder:
                             ft.Column([
                                 ft.Text(drone["name"], size=16, weight="bold"),
                                 ft.Text(drone["specs"], size=13, color=ft.Colors.GREY_600),
-                                ft.Text(f"¥{drone['price']}/天", size=13, color=ft.Colors.RED_700),
+                                ft.Text(f"¥{drone['price'] / 100.0}/千米", size=13, color=ft.Colors.RED_700),
                             ], spacing=4, expand=True),
                         ], spacing=15),
                         padding=20,
@@ -2459,11 +2482,12 @@ class ViewBuilder:
 
                     ft.Container(height=15),
 
-                    # ========== 收货地址 ==========
+                    # ========== 地址信息 ==========
                     ft.Container(
                         content=ft.Column([
-                            ft.Text("收货地址", size=15, weight="bold"),
+                            ft.Text("地址信息", size=15, weight="bold"),
                             ft.Container(height=8),
+                            start_address_display,
                             address_display
                         ]),
                         padding=20,
@@ -2479,7 +2503,6 @@ class ViewBuilder:
                         content=ft.Column([
                             ft.Text("租赁设置", size=15, weight="bold"),
                             ft.Container(height=10),
-                            duration_field,
                             start_row,
                         ]),
                         padding=20,
@@ -2524,16 +2547,6 @@ class ViewBuilder:
     def build_drone_detail(self, drone_id: str):
         """构建无人机详情页"""
         drone = self.app.drone_manager.get_by_id(drone_id)
-        
-        if not drone:
-            # 如果找不到无人机，显示错误页面
-            return ft.Container(
-                content=ft.Column([
-                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color=ft.Colors.GREY_400),
-                    ft.Text("无人机不存在", size=20, weight="bold"),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
-                expand=True,
-            )
 
         # 顶部导航栏
         top_bar = ft.Container(
@@ -2587,10 +2600,10 @@ class ViewBuilder:
                 ft.Container(height=10),
                 ft.Row([
                     ft.Column([
-                        ft.Text(f"¥{drone["price"]}", size=32, color=ft.Colors.RED_700),
+                        ft.Text(f"¥{drone["price"] / 100.0}/千米", size=32, color=ft.Colors.RED_700),
                     ], spacing=0, horizontal_alignment=ft.CrossAxisAlignment.START),
                     ft.Text(
-                        f"原价 ¥{drone['original_price']}",
+                        f"原价 ¥{drone['original_price'] / 100.0}",
                         size=14,
                         color=ft.Colors.GREY_500,
                         style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH)
@@ -2867,6 +2880,25 @@ class App:
 
         # 加载首页
         page.add(self.view_builder.build_home())
+        page.run_task(self.order_checker)
+
+    async def order_checker(self):
+        while True:
+            phone = self.config.get("last_user")
+
+            if not phone:
+                await asyncio.sleep(10)
+                continue
+
+            now = datetime.datetime.now().astimezone()
+            for order in self.user_manager.get_orders(phone):
+                status = order.get("status")
+                start = datetime.datetime.strptime(order["start_time"], "%Y-%m-%d %H:%M").astimezone()
+
+                if status == "待配送" and now >= start:
+                    self.user_manager.update_order_status(phone, order["id"], "租赁中")
+
+            await asyncio.sleep(60)
 
     def __call__(self, *args, **kwds):
         self.before_main(*args, **kwds)
