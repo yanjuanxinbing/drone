@@ -10,6 +10,7 @@ import flet_geolocator as ftg
 from geopy.distance import geodesic
 from usermanager import UserManager
 from dronemanager import DroneManager
+from dronecontroler import DroneControler
 from file import FileReader, FileWriter
 
 class ViewBuilder:
@@ -1696,10 +1697,10 @@ class ViewBuilder:
         
         menu_items = ft.Container(
             content=ft.Row([
-                self._menu_item(ft.Icons.RECEIPT_LONG, "我的订单"),
-                self._menu_item(ft.Icons.FAVORITE, "收藏夹"),
-                self._menu_item(ft.Icons.CARD_GIFTCARD, "优惠券"),
-                self._menu_item(ft.Icons.HEADSET_MIC, "客服"),
+                self.build_menu_item(ft.Icons.RECEIPT_LONG, "我的订单"),
+                self.build_menu_item(ft.Icons.FAVORITE, "收藏夹"),
+                self.build_menu_item(ft.Icons.CARD_GIFTCARD, "优惠券"),
+                self.build_menu_item(ft.Icons.HEADSET_MIC, "客服"),
             ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
             padding=ft.Padding.symmetric(vertical=20),
         )
@@ -2715,9 +2716,16 @@ class ViewBuilder:
             bottom_bar,
         ], spacing=0, expand=True)
 
-    def _menu_item(self, icon, label):
+    def build_menu_item(self, icon, label):
         def on_menu_click(label):
-            print(f"点击: {label}")
+            if label == "我的订单":
+                return self.goto("orders")
+            elif label == "收藏夹":
+                pass
+            elif label == "优惠卷":
+                pass
+            else:
+                pass
 
         return ft.Container(
             content=ft.Column([
@@ -2755,6 +2763,7 @@ class App:
         self.config = Config()
         self.user_manager = UserManager()
         self.drone_manager = DroneManager()
+        self.drone_controler = DroneControler()
         self.page = None
         self.view_builder = ViewBuilder(self)
 
@@ -2897,6 +2906,7 @@ class App:
 
                 if status == "待配送" and now >= start:
                     self.user_manager.update_order_status(phone, order["id"], "租赁中")
+                    
 
             await asyncio.sleep(60)
 
