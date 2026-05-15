@@ -14,7 +14,7 @@ from file import FileReader, FileWriter
 
 class ViewBuilder:
     """视图构建器 - 只负责生成 UI"""
-    def __init__(self, app: App):
+    def __init__(self, app: "App"):
         self.app = app
 
     def goto(self, name, drone_id=None, keyword=None, is_booking=False, selected_address=None, start_address=None, is_start=False, order_id=None, selected_index=None):
@@ -2915,4 +2915,4 @@ class App:
 # 启动应用
 if __name__ == "__main__":
     app = App()
-    ft.run(app)
+    ft.run(app, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=5000)
