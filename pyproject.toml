@@ -8,4 +8,5 @@ dependencies = [
     "flet>=0.85.1",
     "flet-geolocator>=0.85.1",
     "geopy>=2.4.1",
+    "pymysql>=1.1.3",
 ]
