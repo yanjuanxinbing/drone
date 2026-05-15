@@ -10,7 +10,6 @@ import flet_geolocator as ftg
 from geopy.distance import geodesic
 from usermanager import UserManager
 from dronemanager import DroneManager
-from dronecontroler import DroneControler
 from file import FileReader, FileWriter
 
 class ViewBuilder:
@@ -2428,7 +2427,9 @@ class ViewBuilder:
                 "drone_id": drone["id"],
                 "drone_name": drone["name"],
                 "start_address": start_address,
+                "start_location": self.app.user_manager.get_location_by_address(phone, start_address),
                 "address": selected_address,
+                "location": self.app.user_manager.get_location_by_address(phone, selected_address),
                 "start_time": start.strftime("%Y-%m-%d %H:%M"),
                 "total_price": total,
                 "status": "待配送",
@@ -2763,7 +2764,6 @@ class App:
         self.config = Config()
         self.user_manager = UserManager()
         self.drone_manager = DroneManager()
-        self.drone_controler = DroneControler()
         self.page = None
         self.view_builder = ViewBuilder(self)
 
@@ -2906,9 +2906,8 @@ class App:
 
                 if status == "待配送" and now >= start:
                     self.user_manager.update_order_status(phone, order["id"], "租赁中")
-                    
 
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
 
     def __call__(self, *args, **kwds):
         self.before_main(*args, **kwds)
