@@ -5,12 +5,27 @@ import asyncio
 import keyvals
 import datetime
 import flet as ft
+import flet_map as ftm
 from config import Config
 import flet_geolocator as ftg
 from geopy.distance import geodesic
 from usermanager import UserManager
 from dronemanager import DroneManager
 from file import FileReader, FileWriter
+
+status_color = {
+    "待配送": ft.Colors.ORANGE,
+    "租赁中": ft.Colors.BLUE,
+    "已完成": ft.Colors.GREEN,
+    "已取消": ft.Colors.GREY_500
+}
+
+status_icon = {
+    "待配送": ft.Icons.LOCAL_SHIPPING_OUTLINED,
+    "租赁中": ft.Icons.FLIGHT,
+    "已完成": ft.Icons.CHECK_CIRCLE_OUTLINE,
+    "已取消": ft.Icons.CANCEL_OUTLINED
+}
 
 class ViewBuilder:
     """视图构建器 - 只负责生成 UI"""
@@ -247,13 +262,6 @@ class ViewBuilder:
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     def build_order_card(self, phone, order, refresh):
-        status_color = {
-            "待配送": ft.Colors.ORANGE,
-            "租赁中": ft.Colors.BLUE,
-            "已完成": ft.Colors.GREEN,
-            "已取消": ft.Colors.GREY_500
-        }
-
         def on_cancel():
             def confirm_cancel():
                 self.app.user_manager.update_order_status(phone, order["id"], "已取消")
@@ -436,39 +444,83 @@ class ViewBuilder:
         ], expand=True, spacing=0)
 
     def build_order_detail(self, order_id: str):
-        """订单详情页"""
+        """订单详情页（含地图）"""
         phone = self.app.config.get("last_user")
         order = self.app.user_manager.get_order_by_id(phone, order_id)
-
-        if not order:
-            return ft.Container(
-                content=ft.Column([
-                    ft.Icon(ft.Icons.ERROR_OUTLINE, size=100, color=ft.Colors.GREY_400),
-                    ft.Text("订单不存在", size=20, weight="bold"),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                alignment=ft.MainAxisAlignment.CENTER),
-                expand=True,
-            )
-
         drone = self.app.drone_manager.get_by_id(order["drone_id"])
 
-        status_color = {
-            "待配送": ft.Colors.ORANGE,
-            "租赁中": ft.Colors.BLUE,
-            "已完成": ft.Colors.GREEN,
-            "已取消": ft.Colors.GREY_500
-        }
-
-        status_icon = {
-            "待配送": ft.Icons.LOCAL_SHIPPING_OUTLINED,
-            "租赁中": ft.Icons.FLIGHT,
-            "已完成": ft.Icons.CHECK_CIRCLE_OUTLINE,
-            "已取消": ft.Icons.CANCEL_OUTLINED
-        }
-
-        # 状态时间轴
         all_statuses = ["待配送", "租赁中", "已完成"]
         current = order.get("status")
+
+        start = self.app.user_manager.get_location_by_address(phone, order["start_address"])
+        START_LNG = float(start.split(",")[0])
+        START_LAT = float(start.split(",")[1])
+
+        end = self.app.user_manager.get_location_by_address(phone, order["address"])
+        END_LNG = float(end.split(",")[0])
+        END_LAT = float(end.split(",")[1])
+
+        #TODO 添加当前位置标签，以及更新逻辑
+
+        # 地图中心取两点中间
+        CENTER_LAT = (START_LAT + END_LAT) / 2
+        CENTER_LNG = (START_LNG + END_LNG) / 2
+
+        def make_pin(icon, bg_color):
+            """生成一个带针脚的地图标记"""
+            return ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Icon(icon, color=ft.Colors.WHITE, size=16),
+                        width=32, height=32,
+                        bgcolor=bg_color,
+                        border_radius=16,
+                        alignment=ft.Alignment.CENTER,
+                        shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.3, bg_color), spread_radius=2),
+                    ),
+                    ft.Container(width=2, height=8, bgcolor=bg_color),
+                    ft.Container(width=6, height=6, bgcolor=ft.Colors.with_opacity(0.4, bg_color), border_radius=3),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
+                alignment=ft.Alignment.CENTER,
+            )
+
+        map_widget = ftm.Map(
+            height=220,
+            initial_center=ftm.MapLatitudeLongitude(CENTER_LAT, CENTER_LNG),
+            initial_zoom=13,
+            min_zoom=3,
+            max_zoom=18,
+            layers=[
+                ftm.TileLayer(
+                    url_template="https://webrd01.is.autonavi.com/appmaptile?size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+                ),
+                # 标记点
+                ftm.MarkerLayer(markers=[
+                    ftm.Marker(
+                        content=make_pin(ft.Icons.FLIGHT_TAKEOFF, ft.Colors.GREEN_600),
+                        coordinates=ftm.MapLatitudeLongitude(START_LAT, START_LNG),
+                        width=36, height=50,
+                    ),
+                    ftm.Marker(
+                        content=make_pin(ft.Icons.FLIGHT_LAND, ft.Colors.RED_500),
+                        coordinates=ftm.MapLatitudeLongitude(END_LAT, END_LNG),
+                        width=36, height=50,
+                    ),
+                ]),
+            ],
+        )
+
+        # 地图图例
+        map_legend = ft.Row([
+            ft.Row([
+                ft.Container(width=10, height=10, bgcolor=ft.Colors.GREEN_600, border_radius=5),
+                ft.Text("装货地址", size=11, color=ft.Colors.GREY_600),
+            ], spacing=4),
+            ft.Row([
+                ft.Container(width=10, height=10, bgcolor=ft.Colors.RED_500, border_radius=5),
+                ft.Text("收货地址", size=11, color=ft.Colors.GREY_600),
+            ], spacing=4),
+        ], spacing=16)
 
         def build_timeline():
             if current == "已取消":
@@ -492,8 +544,7 @@ class ViewBuilder:
                                 size=20,
                             ),
                         ),
-                        ft.Text(s, size=11,
-                                color=ft.Colors.BLUE if is_done else ft.Colors.GREY_400),
+                        ft.Text(s, size=11, color=ft.Colors.BLUE if is_done else ft.Colors.GREY_400),
                     ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=4)
                 )
                 if i < len(all_statuses) - 1:
@@ -522,12 +573,7 @@ class ViewBuilder:
                 content=ft.Text("确认取消该订单？此操作不可撤销。"),
                 actions=[
                     ft.TextButton("返回", on_click=on_close),
-                    ft.Button(
-                        "确认取消",
-                        bgcolor=ft.Colors.RED_400,
-                        color=ft.Colors.WHITE,
-                        on_click=confirm_cancel,
-                    ),
+                    ft.Button("确认取消", bgcolor=ft.Colors.RED_400, color=ft.Colors.WHITE, on_click=confirm_cancel),
                 ],
             )
             self.app.page.overlay.append(dialog)
@@ -547,7 +593,10 @@ class ViewBuilder:
             # 顶部栏
             ft.Container(
                 content=ft.Row([
-                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda: self.goto("orders", selected_index=statuses.index(current))),
+                    ft.IconButton(
+                        icon=ft.Icons.ARROW_BACK,
+                        on_click=lambda: self.goto("orders", selected_index=statuses.index(current)),
+                    ),
                     ft.Text("订单详情", size=20, weight="bold", expand=True),
                 ]),
                 padding=ft.Padding(15, 20, 15, 15),
@@ -573,7 +622,28 @@ class ViewBuilder:
                                 ], spacing=2, expand=True),
                             ], spacing=12),
                             ft.Container(height=15),
-                            build_timeline()
+                            build_timeline(),
+                        ]),
+                        padding=20,
+                        bgcolor=ft.Colors.WHITE,
+                        border_radius=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                    ),
+
+                    ft.Container(height=15),
+
+                    # ========== 地图卡片 ==========
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("飞行路线", size=15, weight="bold"),
+                            ft.Container(height=10),
+                            ft.Container(
+                                content=map_widget,
+                                border_radius=10,
+                                clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                            ),
+                            ft.Container(height=8),
+                            map_legend,
                         ]),
                         padding=20,
                         bgcolor=ft.Colors.WHITE,
@@ -611,9 +681,9 @@ class ViewBuilder:
                         content=ft.Column([
                             ft.Text("租赁信息", size=15, weight="bold"),
                             ft.Container(height=10),
-                            info_row(ft.Icons.LOCATION_ON, "装货地址", order["start_address"]),
+                            info_row(ft.Icons.FLIGHT_TAKEOFF, "装货地址", order["start_address"]),
                             ft.Divider(height=12, color=ft.Colors.GREY_100),
-                            info_row(ft.Icons.LOCATION_ON, "收货地址", order["address"]),
+                            info_row(ft.Icons.FLIGHT_LAND, "收货地址", order["address"]),
                             ft.Divider(height=12, color=ft.Colors.GREY_100),
                             info_row(ft.Icons.PLAY_CIRCLE_OUTLINE, "开始时间", order["start_time"]),
                             ft.Divider(height=12, color=ft.Colors.GREY_100),
@@ -1133,7 +1203,7 @@ class ViewBuilder:
                     def on_tip_click(_, f=full, l=tip_location):
                         address_field.value = f
                         nonlocal selected_loaction
-                        selected_loaction = tip_location
+                        selected_loaction = l
                         tips_column.controls.clear()
                         self.app.page.update()
 
@@ -1171,7 +1241,7 @@ class ViewBuilder:
                 return
 
             if is_edit:
-                self.app.user_manager.update_address(phone, existing["id"], address)
+                self.app.user_manager.update_address(phone, existing["id"], address, selected_loaction)  # 补传 location
                 self.show_snackbar("地址已更新", ft.Colors.GREEN_400)
             else:
                 self.app.user_manager.add_address(phone, address, selected_loaction)

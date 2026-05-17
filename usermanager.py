@@ -33,7 +33,7 @@ class UserManager:
         for addr in self.get_addresses(phone):
             if addr["id"] == addr_id:
                 addr["address"] = address
-                addr["locaton"] = location
+                addr["location"] = location
                 self.save()
                 return
 
