@@ -14,6 +14,11 @@
                 "id": "2",
                 "address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u4e2d\u5357\u5927\u5b66\u5cb3\u9e93\u5c71\u6821\u533a(\u5357\u5927\u95e8) \u9e93\u5c71\u5357\u8def\u4e2d\u5357\u5927\u5b66",
                 "location": "112.932320,28.164329"
+            },
+            {
+                "id": "3",
+                "address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u957f\u6c99\u65b0\u5965\u71c3\u6c14\u6cb3\u897f\u5206\u516c\u53f8 \u9e93\u5929\u8def36\u53f7",
+                "location": "112.890471,28.223476"
             }
         ],
         "orders": [

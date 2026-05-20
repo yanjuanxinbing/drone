@@ -27,6 +27,13 @@ status_icon = {
     "已取消": ft.Icons.CANCEL_OUTLINED
 }
 
+LEVEL_COLORS = {
+    2: ft.Colors.RED_400,
+    3: ft.Colors.ORANGE_400,
+    7: ft.Colors.YELLOW_600,
+    8: ft.Colors.BLUE_400,
+}
+
 class ViewBuilder:
     """视图构建器 - 只负责生成 UI"""
     def __init__(self, app: App):
@@ -443,6 +450,99 @@ class ViewBuilder:
             tabs_container,
         ], expand=True, spacing=0)
 
+    def make_pin(self, icon, bg_color):
+        """生成一个带针脚的地图标记"""
+        return ft.Container(
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Icon(icon, color=ft.Colors.WHITE, size=16),
+                    width=32, height=32,
+                    bgcolor=bg_color,
+                    border_radius=16,
+                    alignment=ft.Alignment.CENTER,
+                    shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.3, bg_color), spread_radius=2),
+                ),
+                ft.Container(width=2, height=8, bgcolor=bg_color),
+                ft.Container(width=6, height=6, bgcolor=ft.Colors.with_opacity(0.4, bg_color), border_radius=3),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
+            alignment=ft.Alignment.CENTER,
+        )
+
+    def build_map_layers(self, start_gps, end_gps):
+        """根据大疆解析出的 zones 数据，构建 Flet Map 的图层列表"""
+        polygon_markers = []
+        circle_markers = []
+
+        zones = (start_gps[0], start_gps[1], end_gps[0], end_gps[1])
+
+        for zone in zones:
+            color = LEVEL_COLORS.get(zone["level"])
+            opacity = 0.25 if zone["level"] == 2 else 0.4
+
+            if zone["geometry"]["type"] == "polygon":
+                pts = zone["geometry"]["points"]
+                coordinates = [
+                    ftm.MapLatitudeLongitude(lat, lng)
+                    for lat, lng in pts
+                ]
+                
+                polygon_markers.append(
+                    ftm.PolygonMarker(
+                        coordinates=coordinates,
+                        color=ft.Colors.with_opacity(opacity, color),
+                        border_color=color,
+                        border_stroke_width=2
+                    )
+                )
+
+            elif zone["geometry"]["type"] == "circle":
+                center_lat, center_lng = zone["geometry"]["center"]
+                radius = zone["geometry"]["radius"]
+
+                circle_markers.append(
+                    ftm.CircleMarker(
+                        coordinates=ftm.MapLatitudeLongitude(center_lat, center_lng),
+                        radius=radius,
+                        use_radius_in_meter=True,
+                        color=ft.Colors.with_opacity(opacity, color),
+                        border_color=color,
+                        border_stroke_width=2,
+                    )
+                )
+
+        layers = [
+            # 高德底图
+            ftm.TileLayer(
+                url_template="https://webrd01.is.autonavi.com/appmaptile?size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+            ),
+            ftm.PolygonLayer(polygons=polygon_markers),
+            ftm.CircleLayer(circles=circle_markers),
+            ftm.MarkerLayer(
+                markers=[
+                    ftm.Marker(
+                        content=self.make_pin(
+                            ft.Icons.FLIGHT_TAKEOFF, ft.Colors.GREEN_600
+                        ),
+                        coordinates=ftm.MapLatitudeLongitude(
+                            start_gps[0], start_gps[1]
+                        ),
+                        width=36,
+                        height=50,
+                    ),
+                    ftm.Marker(
+                        content=self.make_pin(ft.Icons.FLIGHT_LAND, ft.Colors.RED_500),
+                        coordinates=ftm.MapLatitudeLongitude(
+                            end_gps[0], end_gps[1]
+                        ),
+                        width=36,
+                        height=50,
+                    ),
+                ] #TODO 添加当前位置标签，以及更新逻辑
+            ),
+        ]
+
+        return layers
+
     def build_order_detail(self, order_id: str):
         """订单详情页（含地图）"""
         phone = self.app.config.get("last_user")
@@ -460,29 +560,8 @@ class ViewBuilder:
         END_LNG = float(end.split(",")[0])
         END_LAT = float(end.split(",")[1])
 
-        #TODO 添加当前位置标签，以及更新逻辑
-
-        # 地图中心取两点中间
         CENTER_LAT = (START_LAT + END_LAT) / 2
         CENTER_LNG = (START_LNG + END_LNG) / 2
-
-        def make_pin(icon, bg_color):
-            """生成一个带针脚的地图标记"""
-            return ft.Container(
-                content=ft.Column([
-                    ft.Container(
-                        content=ft.Icon(icon, color=ft.Colors.WHITE, size=16),
-                        width=32, height=32,
-                        bgcolor=bg_color,
-                        border_radius=16,
-                        alignment=ft.Alignment.CENTER,
-                        shadow=ft.BoxShadow(blur_radius=8, color=ft.Colors.with_opacity(0.3, bg_color), spread_radius=2),
-                    ),
-                    ft.Container(width=2, height=8, bgcolor=bg_color),
-                    ft.Container(width=6, height=6, bgcolor=ft.Colors.with_opacity(0.4, bg_color), border_radius=3),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
-                alignment=ft.Alignment.CENTER,
-            )
 
         map_widget = ftm.Map(
             height=220,
@@ -490,24 +569,7 @@ class ViewBuilder:
             initial_zoom=13,
             min_zoom=3,
             max_zoom=18,
-            layers=[
-                ftm.TileLayer(
-                    url_template="https://webrd01.is.autonavi.com/appmaptile?size=1&scale=1&style=8&x={x}&y={y}&z={z}",
-                ),
-                # 标记点
-                ftm.MarkerLayer(markers=[
-                    ftm.Marker(
-                        content=make_pin(ft.Icons.FLIGHT_TAKEOFF, ft.Colors.GREEN_600),
-                        coordinates=ftm.MapLatitudeLongitude(START_LAT, START_LNG),
-                        width=36, height=50,
-                    ),
-                    ftm.Marker(
-                        content=make_pin(ft.Icons.FLIGHT_LAND, ft.Colors.RED_500),
-                        coordinates=ftm.MapLatitudeLongitude(END_LAT, END_LNG),
-                        width=36, height=50,
-                    ),
-                ]),
-            ],
+            layers=self.build_map_layers((START_LAT, START_LNG), (END_LAT, END_LNG))
         )
 
         # 地图图例
@@ -520,6 +582,14 @@ class ViewBuilder:
                 ft.Container(width=10, height=10, bgcolor=ft.Colors.RED_500, border_radius=5),
                 ft.Text("收货地址", size=11, color=ft.Colors.GREY_600),
             ], spacing=4),
+            ft.Row([
+                ft.Container(width=10, height=10, bgcolor=ft.Colors.RED_400, border_radius=2),
+                ft.Text("禁飞区", size=11, color=ft.Colors.GREY_600),
+            ], spacing=4),
+            ft.Row([
+                ft.Container(width=10, height=10, bgcolor=ft.Colors.ORANGE_400, border_radius=2),
+                ft.Text("警示区", size=11, color=ft.Colors.GREY_600),
+            ], spacing=4)
         ], spacing=16)
 
         def build_timeline():
