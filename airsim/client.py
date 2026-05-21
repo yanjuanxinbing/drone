@@ -13,42 +13,93 @@ class MsgpackRpcClient:
         self.sock.connect((ip, port))
         self.msg_id = 0
         self.msg_id_lock = threading.Lock()
-        self.unpacker = msgpack.Unpacker(raw=False)
 
-    def call(self, method, *args):
+        # 核心：用字典来管理所有正在等待响应的 Future 对象 {msg_id: Future}
+        self.pending_requests = {}
+        self.requests_lock = threading.Lock()
+        
+        self.is_running = True
+        
+        # 启动唯一的、专门负责从 Socket 读数据的守护线程
+        self.receiver_thread = threading.Thread(target=self._listen_loop, daemon=True)
+        self.receiver_thread.start()
+
+    @staticmethod
+    def _encode(obj):
+        if hasattr(obj, 'to_msgpack'):
+            return obj.to_msgpack()
+        raise TypeError(f"can not serialize '{type(obj).__name__}' object")
+
+    def _listen_loop(self):
+        """全局唯一的接收线程：所有网络回包都由它统一收取和分发"""
+        unpacker = msgpack.Unpacker(raw=False)
+        while self.is_running:
+            try:
+                chunk = self.sock.recv(4096)
+                if not chunk:
+                    break
+                unpacker.feed(chunk)
+                for response in unpacker:
+                    # Msgpack-RPC 响应格式: [type(1), msg_id, error, result]
+                    if isinstance(response, list) and len(response) >= 4 and response[0] == 1:
+                        msg_id = response[1]
+                        error = response[2]
+                        result = response[3]
+                        
+                        # 找到是谁在等这个 ID 的数据，把结果塞给它
+                        with self.requests_lock:
+                            future = self.pending_requests.pop(msg_id, None)
+                        
+                        if future and not future.done():
+                            if error:
+                                future.set_exception(Exception(f"RPC error: {error}"))
+                            else:
+                                future.set_result(result)
+            except Exception as e:
+                if self.is_running:
+                    print(f"[RPC Receiver Error] {e}")
+                break
+
+    def call_async(self, method, *args) -> Future:
+        """异步调用：立刻返回一个标准的 Python Future 对象"""
         with self.msg_id_lock:
             self.msg_id += 1
             current_id = self.msg_id
 
-        payload = msgpack.packb([0, current_id, method, list(args)], use_bin_type=True)
-        self.sock.sendall(payload)
-
-        while True:
-            chunk = self.sock.recv(4096)
-            self.unpacker.feed(chunk)
-            for response in self.unpacker:
-                if response[0] == 1 and response[1] == current_id:
-                    if response[2]:
-                        raise Exception(f"RPC error: {response[2]}")
-                    return response[3]
-
-    def call_async(self, method, *args):
+        # 1. 注册我们要等待的 Future
         future = Future()
+        with self.requests_lock:
+            self.pending_requests[current_id] = future
 
-        def _run():
-            try:
-                result = self.call(method, *args)
-                future.set_result(result)
-            except Exception as e:
-                future.set_exception(e)
-
-        thread = threading.Thread(target=_run, daemon=True)
-        thread.start()
+        # 2. 序列化并发送请求
+        payload = msgpack.packb(
+            [0, current_id, method, list(args)],
+            use_bin_type=True,
+            default=self._encode,
+        )
+        try:
+            self.sock.sendall(payload)
+        except Exception as e:
+            with self.requests_lock:
+                self.pending_requests.pop(current_id, None)
+            future.set_exception(e)
 
         return future
 
+    def call(self, method, *args):
+        """同步调用：利用异步调用加 .result() 阻塞等待，天然线程安全"""
+        future = self.call_async(method, *args)
+        return future.result()  # 这里会阻塞当前线程，直到全局接收线程帮它拿到数据
+
     def close(self):
+        self.is_running = False
         self.sock.close()
+
+        with self.requests_lock:
+            for future in self.pending_requests.values():
+                if not future.done():
+                    future.set_exception(ConnectionAbortedError("connection closed"))
+            self.pending_requests.clear()
 
 class VehicleClient:
     def __init__(self, ip = "", port = 41451, timeout_value = 3600):
