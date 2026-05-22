@@ -19,24 +19,13 @@
                 "id": "3",
                 "address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u957f\u6c99\u65b0\u5965\u71c3\u6c14\u6cb3\u897f\u5206\u516c\u53f8 \u9e93\u5929\u8def36\u53f7",
                 "location": "112.890471,28.223476"
+            },
+            {
+                "id": "4",
+                "address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u4e2d\u5357\u5927\u5b66\u6f47\u6e58\u6821\u533a\u6559\u5b66\u697cA\u5ea7 \u6f47\u6e58\u4e2d\u8def\u4e0e\u9773\u6c5f\u8def\u4ea4\u53c9\u53e3\u897f\u5357150\u7c73",
+                "location": "112.941729,28.150296"
             }
         ],
-        "orders": [
-            {
-                "id": "20260517183542",
-                "phone": "15616131369",
-                "drone_id": "dji_air_3s",
-                "drone_name": "DJI Air 3S",
-                "start_address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u4e2d\u5357\u5927\u5b66\u5cb3\u9e93\u5c71\u6821\u533a(\u5357\u5927\u95e8) \u9e93\u5c71\u5357\u8def\u4e2d\u5357\u5927\u5b66",
-                "start_location": "112.932320,28.164329",
-                "address": "\u6e56\u5357\u7701\u957f\u6c99\u5e02\u5cb3\u9e93\u533a\u4e2d\u5357\u5927\u5b662\u98df\u5802 \u9e93\u5c71\u5357\u8def932\u53f7\u4e2d\u5357\u5927\u5b66\u9e93\u5357\u6821\u533a",
-                "location": "112.935477,28.158683",
-                "start_time": "2026-05-17 18:35",
-                "total_price": 8.09,
-                "status": "\u79df\u8d41\u4e2d",
-                "created_at": "2026-05-17 18:35",
-                "is_booking": true
-            }
-        ]
+        "orders": []
     }
 }

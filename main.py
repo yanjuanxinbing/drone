@@ -11,6 +11,8 @@ import flet_geolocator as ftg
 from geopy.distance import geodesic
 from usermanager import UserManager
 from dronemanager import DroneManager
+from routemanager import RouteManager
+from dronecontroller import DroneController
 from file import FileReader, FileWriter
 
 status_color = {
@@ -390,7 +392,7 @@ class ViewBuilder:
 
         selected_index = selected_index or 0
         def build_tabs():
-            tab_labels = ["租赁中", "待配送", "已结束", "已取消"]
+            tab_labels = ["租赁中", "待配送", "已完成", "已取消"]
             tab_contents = [self.build_tab_content(phone, label, refresh) for label in tab_labels]
 
             def build_tab_row():
@@ -473,7 +475,7 @@ class ViewBuilder:
         polygon_markers = []
         circle_markers = []
 
-        zones = (start_gps[0], start_gps[1], end_gps[0], end_gps[1])
+        zones = RouteManager.get_nfz(start_gps[0], start_gps[1], end_gps[0], end_gps[1])
 
         for zone in zones:
             color = LEVEL_COLORS.get(zone["level"])
@@ -537,7 +539,16 @@ class ViewBuilder:
                         width=36,
                         height=50,
                     ),
-                ] #TODO 添加当前位置标签，以及更新逻辑
+                    ftm.Marker(
+                        content=self.make_pin(ft.Icons.FLIGHT_LAND, ft.Colors.BLUE_500),
+                        coordinates=ftm.MapLatitudeLongitude(
+                            self.app.drone_controller.get_state()["lat"],
+                            self.app.drone_controller.get_state()["lon"]
+                        ),
+                        width=36,
+                        height=50,
+                    ),
+                ]
             ),
         ]
 
@@ -1794,87 +1805,6 @@ class ViewBuilder:
             )
         ], expand=True)
 
-    def build_profile(self):
-        """构建我的页面"""
-        phone = self.app.config.get("last_user")
-        username = self.app.user_manager.get(phone).get("nick_name") if phone else "游客"
-        is_logged_in = bool(phone)
-
-        def on_logout_click():
-            """退出登录"""
-            self.app.config.logout()
-            self.goto("profile")
-        
-        user_card = ft.Container(
-            content=ft.Row([
-                ft.Container(
-                    content=ft.CircleAvatar(foreground_image_src=FileReader.read_img(f"{phone}.png"), radius=40),
-                    width=70,
-                    height=70,
-                    bgcolor=ft.Colors.BLUE_100,
-                    border_radius=35,
-                    alignment=ft.Alignment.CENTER,
-                ),
-                ft.Column([
-                    ft.Text(username, size=20, weight="bold"),
-                    ft.Text(
-                        "会员用户" if is_logged_in else "点击登录",
-                        size=12,
-                        color=ft.Colors.GREY_600,
-                    ),
-                ], spacing=2, expand=True),
-                ft.IconButton(
-                    icon=ft.Icons.SETTINGS,
-                    on_click=lambda _, is_logged_in=is_logged_in: self.goto("settings") if is_logged_in else self.show_snackbar("请先登录", ft.Colors.RED_400),
-                ),
-            ]),
-            bgcolor=ft.Colors.BLUE_50,
-            padding=20,
-            border_radius=15,
-            on_click=lambda: self.goto("login") if not is_logged_in else None,
-        )
-        
-        menu_items = ft.Container(
-            content=ft.Row([
-                self.build_menu_item(ft.Icons.RECEIPT_LONG, "我的订单"),
-                self.build_menu_item(ft.Icons.FAVORITE, "收藏夹"),
-                self.build_menu_item(ft.Icons.CARD_GIFTCARD, "优惠券"),
-                self.build_menu_item(ft.Icons.HEADSET_MIC, "客服"),
-            ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
-            padding=ft.Padding.symmetric(vertical=20),
-        )
-        
-        settings_section = ft.Column([
-            ft.Container(
-                content=ft.Text("设置", size=16, weight="bold"),
-                padding=ft.Padding.only(left=20, top=10, bottom=10),
-            ),
-            self._list_item(ft.Icons.LANGUAGE, "语言设置", "中文"),
-            self._list_item(ft.Icons.DARK_MODE_OUTLINED, "深色模式", "关闭"),
-            self._list_item(ft.Icons.INFO_OUTLINE, "关于我们"),
-        ])
-        
-        logout_section = ft.Column([
-            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
-            ft.Container(
-                content=ft.TextButton(
-                    "退出登录",
-                    icon=ft.Icons.LOGOUT,
-                    on_click=lambda: on_logout_click(),
-                    style=ft.ButtonStyle(color=ft.Colors.RED_400),
-                ),
-                alignment=ft.Alignment.CENTER,
-            ),
-        ]) if is_logged_in else ft.Container()
-        
-        return ft.Column([
-            user_card,
-            menu_items,
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            settings_section,
-            logout_section,
-        ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
-
     def build_forget(self):
         """忘记密码页面"""
         phone_field = ft.TextField(
@@ -2558,6 +2488,17 @@ class ViewBuilder:
                 self.show_snackbar("装货地址不应和收货地址相同", ft.Colors.RED_400)
                 return
 
+            start_location = self.app.user_manager.get_location_by_address(phone, start_address)
+            location = self.app.user_manager.get_location_by_address(phone, selected_address)
+
+            if RouteManager.in_nfz(start_location.split(",")):
+                self.show_snackbar("装货地址在禁飞区内", ft.Colors.RED_400)
+                return
+
+            if RouteManager.in_nfz(location.split(",")):
+                self.show_snackbar("卸货地址在禁飞区内", ft.Colors.RED_400)
+                return
+
             start = datetime.datetime.strptime(start_field.value, "%Y-%m-%d %H:%M")
             total = float(price_text.value[1:])
 
@@ -2567,9 +2508,9 @@ class ViewBuilder:
                 "drone_id": drone["id"],
                 "drone_name": drone["name"],
                 "start_address": start_address,
-                "start_location": self.app.user_manager.get_location_by_address(phone, start_address),
+                "start_location": start_location,
                 "address": selected_address,
-                "location": self.app.user_manager.get_location_by_address(phone, selected_address),
+                "location": location,
                 "start_time": start.strftime("%Y-%m-%d %H:%M"),
                 "total_price": total,
                 "status": "待配送",
@@ -2857,13 +2798,91 @@ class ViewBuilder:
             bottom_bar,
         ], spacing=0, expand=True)
 
+    def build_profile(self):
+        """构建我的页面"""
+        phone = self.app.config.get("last_user")
+        username = self.app.user_manager.get(phone).get("nick_name") if phone else "游客"
+        is_logged_in = bool(phone)
+
+        def on_logout_click():
+            """退出登录"""
+            self.app.config.logout()
+            self.goto("profile")
+        
+        user_card = ft.Container(
+            content=ft.Row([
+                ft.Container(
+                    content=ft.CircleAvatar(foreground_image_src=FileReader.read_img(f"{phone}.png"), radius=40),
+                    width=70,
+                    height=70,
+                    bgcolor=ft.Colors.BLUE_100,
+                    border_radius=35,
+                    alignment=ft.Alignment.CENTER,
+                ),
+                ft.Column([
+                    ft.Text(username, size=20, weight="bold"),
+                    ft.Text(
+                        "会员用户" if is_logged_in else "点击登录",
+                        size=12,
+                        color=ft.Colors.GREY_600,
+                    ),
+                ], spacing=2, expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.SETTINGS,
+                    on_click=lambda _, is_logged_in=is_logged_in: self.goto("settings") if is_logged_in else self.show_snackbar("请先登录", ft.Colors.RED_400),
+                ),
+            ]),
+            bgcolor=ft.Colors.BLUE_50,
+            padding=20,
+            border_radius=15,
+            on_click=lambda: self.goto("login") if not is_logged_in else None,
+        )
+        
+        menu_items = ft.Container(
+            content=ft.Row([
+                self.build_menu_item(ft.Icons.RECEIPT_LONG, "我的订单"),
+                self.build_menu_item(ft.Icons.FAVORITE, "收藏夹"),
+                self.build_menu_item(ft.Icons.HEADSET_MIC, "客服"),
+            ], alignment=ft.MainAxisAlignment.SPACE_AROUND),
+            padding=ft.Padding.symmetric(vertical=20),
+        )
+        
+        settings_section = ft.Column([
+            ft.Container(
+                content=ft.Text("设置", size=16, weight="bold"),
+                padding=ft.Padding.only(left=20, top=10, bottom=10),
+            ),
+            self._list_item(ft.Icons.LANGUAGE, "实名认证", "已认证" if self.app.user_manager.realname(phone) else "未认证"),
+            self._list_item(ft.Icons.AIRPLANEMODE_ACTIVE, "飞手认证", "已认证" if self.app.user_manager.pilot(phone) else "未认证"),
+            self._list_item(ft.Icons.INFO_OUTLINE, "关于我们"),
+        ])
+
+        logout_section = ft.Column([
+            ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+            ft.Container(
+                content=ft.TextButton(
+                    "退出登录",
+                    icon=ft.Icons.LOGOUT,
+                    on_click=lambda: on_logout_click(),
+                    style=ft.ButtonStyle(color=ft.Colors.RED_400),
+                ),
+                alignment=ft.Alignment.CENTER,
+            ),
+        ]) if is_logged_in else ft.Container()
+        
+        return ft.Column([
+            user_card,
+            menu_items,
+            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            settings_section,
+            logout_section,
+        ], scroll=ft.ScrollMode.AUTO, expand=True, spacing=0)
+
     def build_menu_item(self, icon, label):
         def on_menu_click(label):
             if label == "我的订单":
                 return self.goto("orders")
             elif label == "收藏夹":
-                pass
-            elif label == "优惠卷":
                 pass
             else:
                 pass
@@ -2904,6 +2923,7 @@ class App:
         self.config = Config()
         self.user_manager = UserManager()
         self.drone_manager = DroneManager()
+        self.drone_controller = DroneController()
         self.page = None
         self.view_builder = ViewBuilder(self)
 
@@ -3045,9 +3065,11 @@ class App:
                 start = datetime.datetime.strptime(order["start_time"], "%Y-%m-%d %H:%M").astimezone()
 
                 if status == "待配送" and now >= start:
+                    on_task_finished = lambda: self.user_manager.update_order_status(phone, order["id"], "已完成")
+                    self.drone_controller.create_task(order["start_location"], order["location"], on_task_finished)
                     self.user_manager.update_order_status(phone, order["id"], "租赁中")
 
-            await asyncio.sleep(30)
+            await asyncio.sleep(30000)
 
     def __call__(self, *args, **kwds):
         self.before_main(*args, **kwds)

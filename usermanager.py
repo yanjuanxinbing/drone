@@ -15,6 +15,12 @@ class UserManager:
     def get(self, phone) -> dict:
         return self.users.get(phone)
 
+    def realname(self, phone) -> bool:
+        return self.get(phone)["is_real_name_verified"]
+
+    def pilot(self, phone) -> bool:
+        return self.get(phone)["is_pilot_verified"]
+
     def get_addresses(self, phone: str) -> list:
         return self.get(phone).get("addresses")
 
@@ -87,7 +93,9 @@ class UserManager:
             "gender": "保密",
             "birthday": "",
             "addresses": [],
-            "orders": []
+            "orders": [],
+            "is_real_name_verified": False,
+            "is_pilot_verified": False
         }
         self.save()
 
