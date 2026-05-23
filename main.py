@@ -86,6 +86,8 @@ class ViewBuilder:
                 view = self.build_help_center()
             case "address_picker":
                 view = self.build_address_picker(drone_id, is_booking, selected_address, start_address, is_start)
+            case "play_rent":
+                view = self.build_play_rent()
             case _:
                 print(f"未知路由: {name}")
                 return
@@ -101,6 +103,109 @@ class ViewBuilder:
         self.app.page.overlay.append(snackbar)
         snackbar.open = True
         self.app.page.update()
+
+    def build_play_rent(self):
+        """构建 AirSim 虚拟飞行操控舱页面"""
+        phone = self.app.config.get("last_user")
+        if not phone:
+            return ft.Container(
+                content=ft.Text("请先登录后体验 AirSim 虚拟试飞功能", size=16, weight="bold"),
+                alignment=ft.Alignment.CENTER,
+                expand=True
+            )
+
+        # 实时图传画面组件 (默认显示占位图或等待画面)
+        # 如果你后续实现了本地 AirSim 视频流推送，可以通过修改这个 img_stream.src_base64 来更新画面
+        img_stream = ft.Image(
+            src="https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=500", # 临时占位图
+            width=360,
+            height=240,
+            fit=ft.ImageFit.COVER,
+            border_radius=10
+        )
+
+        # 状态显示文本
+        status_text = ft.Text("系统状态: 准备就绪 (未连接到 AirSim)", color=ft.Colors.GREY_600, size=12)
+
+        # 封装一个统一发送控制指令的函数
+        def send_cmd(action_type: str):
+            """将摇杆或按键动作实时转换为 AirSim 输入指令"""
+            status_text.value = f"正在向 AirSim 发送指令: [{action_type}]"
+            status_text.color = ft.Colors.BLUE_600
+            self.app.page.update()
+            
+            # 这里调用你的无人机控制器，把动作透传给 AirSim API
+            # 例如: self.app.drone_controller.send_airsim_command(action_type)
+            print(f"DEBUG: 转化为 AirSim 输入 -> {action_type}")
+
+        # 一键解锁/起飞
+        def toggle_power(_):
+            send_cmd("takeoff")
+            status_text.value = "系统状态: 已起飞，控制权已接管"
+            status_text.color = ft.Colors.GREEN_700
+            self.app.page.update()
+
+        # 虚拟摇杆布局：采用经典的左右双十字盘设计
+        # 左摇杆：控制高度(上/下)与偏航角(左转/右转)
+        left_joystick = ft.Column([
+            ft.Text("高度 / 转向 (左摇杆)", size=12, color=ft.Colors.GREY_500, weight="bold"),
+            ft.IconButton(icon=ft.Icons.ARROW_DROP_UP, on_click=lambda _: send_cmd("throttle_up"), icon_size=32),
+            ft.Row([
+                ft.IconButton(icon=ft.Icons.ARROW_LEFT, on_click=lambda _: send_cmd("yaw_left"), icon_size=32),
+                ft.Container(width=32, height=32, bgcolor=ft.Colors.BLUE_GREY_100, border_radius=16), # 中心锚点
+                ft.IconButton(icon=ft.Icons.ARROW_RIGHT, on_click=lambda _: send_cmd("yaw_right"), icon_size=32),
+            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
+            ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN, on_click=lambda _: send_cmd("throttle_down"), icon_size=32),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
+
+        # 右摇杆：控制俯仰(前进/后退)与翻滚(左移/右移)
+        right_joystick = ft.Column([
+            ft.Text("前后 / 左右 (右摇杆)", size=12, color=ft.Colors.GREY_500, weight="bold"),
+            ft.IconButton(icon=ft.Icons.ARROW_DROP_UP, on_click=lambda _: send_cmd("pitch_forward"), icon_size=32),
+            ft.Row([
+                ft.IconButton(icon=ft.Icons.ARROW_LEFT, on_click=lambda _: send_cmd("roll_left"), icon_size=32),
+                ft.Container(width=32, height=32, bgcolor=ft.Colors.BLUE_GREY_100, border_radius=16), # 中心锚点
+                ft.IconButton(icon=ft.Icons.ARROW_RIGHT, on_click=lambda _: send_cmd("roll_right"), icon_size=32),
+            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
+            ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN, on_click=lambda _: send_cmd("pitch_backward"), icon_size=32),
+        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
+
+        return ft.Column([
+            # 顶部导航及功能键
+            ft.Container(
+                content=ft.Row([
+                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("home")),
+                    ft.Text("AirSim 智能飞行控制舱", size=18, weight="bold", expand=True),
+                    ft.ElevatedButton("一键起飞", icon=ft.Icons.FLIGHT_TAKEOFF, on_click=toggle_power, bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE)
+                ]),
+                padding=ft.Padding(10, 15, 10, 10),
+                bgcolor=ft.Colors.WHITE,
+            ),
+            
+            # 核心区 1：AirSim 实时高清图传画面
+            ft.Container(
+                content=ft.Column([
+                    img_stream,
+                    ft.Container(content=status_text, padding=ft.Padding(10, 5, 10, 5))
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.Alignment.CENTER,
+                padding=10
+            ),
+            
+            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            
+            # 核心区 2：模拟双手手柄的虚拟摇杆区
+            ft.Container(
+                content=ft.Row([
+                    left_joystick,
+                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_200),
+                    right_joystick
+                ], alignment=ft.MainAxisAlignment.SPACE_EVENLY, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                expand=True,
+                padding=10,
+                bgcolor=ft.Colors.WHITE
+            )
+        ], expand=True, spacing=0)
 
     def build_card(self, drone_id, name, price, tag, specs):
         return ft.Container(
@@ -212,6 +317,7 @@ class ViewBuilder:
 
     def build_home(self):
         """构建首页"""
+        phone = self.app.config.get("last_user")
         header = ft.Container(
             content=ft.Text("DroneGo", size=32, weight="bold", color="white"),
             bgcolor=ft.Colors.BLUE,
@@ -259,9 +365,22 @@ class ViewBuilder:
             ],
         )
 
+        play_banner = ft.Container( 
+            content=ft.Row([
+                ft.Icon(ft.Icons.FLIGHT_TAKEOFF, color=ft.Colors.WHITE),
+                ft.Text("全新功能：立即驾驶"),
+            ]),
+            bgcolor=ft.Colors.ORANGE,
+            padding=15,
+            border_radius=12,
+            margin=ft.Margin.symmetric(horizontal=20),
+            on_click=lambda: self.goto("play_rent") if phone and self.app.user_manager.pilot(phone) else self.show_snackbar("请先进行飞手认证", ft.Colors.RED_500)
+        )
+
         return ft.Column([
             header,
             search_bar,
+            play_banner,
             ft.Container(height=10),
             ft.Container(
                 content=ft.Text("推荐机型", size=18, weight="bold"),
@@ -2923,7 +3042,7 @@ class App:
         self.config = Config()
         self.user_manager = UserManager()
         self.drone_manager = DroneManager()
-        self.drone_controller = DroneController()
+        # self.drone_controller = DroneController()
         self.page = None
         self.view_builder = ViewBuilder(self)
 

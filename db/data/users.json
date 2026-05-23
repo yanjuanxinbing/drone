@@ -26,6 +26,8 @@
                 "location": "112.941729,28.150296"
             }
         ],
-        "orders": []
+        "orders": [],
+        "is_real_name_verified": false,
+        "is_pilot_verified": true
     }
 }
