@@ -1,9 +1,14 @@
 import re
 import sys
+import time
+import queue
+import base64
 import aiohttp
+import airsim
 import asyncio
 import keyvals
 import datetime
+import threading
 import flet as ft
 import flet_map as ftm
 from config import Config
@@ -105,106 +110,269 @@ class ViewBuilder:
         self.app.page.update()
 
     def build_play_rent(self):
-        """构建 AirSim 虚拟飞行操控舱页面"""
-        phone = self.app.config.get("last_user")
-        if not phone:
-            return ft.Container(
-                content=ft.Text("请先登录后体验 AirSim 虚拟试飞功能", size=16, weight="bold"),
-                alignment=ft.Alignment.CENTER,
-                expand=True
-            )
+        # 切换横屏
+        self.app.page.navigation_bar.visible = False
+        self.app.page.orientation = "landscape"
+        self.app.page.update()
 
-        # 实时图传画面组件 (默认显示占位图或等待画面)
-        # 如果你后续实现了本地 AirSim 视频流推送，可以通过修改这个 img_stream.src_base64 来更新画面
-        img_stream = ft.Image(
-            src="https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=500", # 临时占位图
-            width=360,
-            height=240,
-            fit=ft.ImageFit.COVER,
-            border_radius=10
+        # ── 状态 ────────────────────────────────────────────────────────────
+        ctrl  = {"vx": 0.0, "vy": 0.0, "vz": 0.0, "yaw": 0.0}
+        flags = {"flying": False, "cam_on": True}
+        frame_queue = queue.Queue(maxsize=1)
+
+        HSPD, VSPD, YAW_SPD = 4.0, 2.5, 45.0
+
+        # ── 抓帧线程 ─────────────────────────────────────────────────────────
+        def capture_loop():
+            client = self.app.drone_controller.client
+            while flags["cam_on"]:
+                raw = client.simGetImages([airsim.ImageRequest("0", airsim.ImageType.Scene, compress=True)])[0].image_data_uint8
+                if raw:
+                    if frame_queue.full():
+                        try:
+                            frame_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                    frame_queue.put(raw)
+
+        threading.Thread(target=capture_loop, daemon=True).start()
+
+        # ── 控件 ─────────────────────────────────────────────────────────────
+        img_view = ft.Image(
+            fit=ft.BoxFit.CONTAIN,
+            gapless_playback=True,
+            expand=True,
+            src="https://placehold.co/640x360/263238/90A4AE?text=画面加载中",
         )
 
-        # 状态显示文本
-        status_text = ft.Text("系统状态: 准备就绪 (未连接到 AirSim)", color=ft.Colors.GREY_600, size=12)
+        fps_text  = ft.Text("FPS: --", color=ft.Colors.GREEN,  size=11)
+        hud_stat  = ft.Text("● 连接中", color=ft.Colors.WHITE,  size=11)
+        hud_alt   = ft.Text("ALT --- m", color=ft.Colors.WHITE, size=11)
 
-        # 封装一个统一发送控制指令的函数
-        def send_cmd(action_type: str):
-            """将摇杆或按键动作实时转换为 AirSim 输入指令"""
-            status_text.value = f"正在向 AirSim 发送指令: [{action_type}]"
-            status_text.color = ft.Colors.BLUE_600
-            self.app.page.update()
-            
-            # 这里调用你的无人机控制器，把动作透传给 AirSim API
-            # 例如: self.app.drone_controller.send_airsim_command(action_type)
-            print(f"DEBUG: 转化为 AirSim 输入 -> {action_type}")
+        def make_hud(ctrl):
+            return ft.Container(
+                content=ctrl,
+                padding=ft.Padding(6, 2, 6, 2),
+                bgcolor=ft.Colors.with_opacity(0.55, ft.Colors.BLACK),
+                border_radius=4,
+            )
 
-        # 一键解锁/起飞
-        def toggle_power(_):
-            send_cmd("takeoff")
-            status_text.value = "系统状态: 已起飞，控制权已接管"
-            status_text.color = ft.Colors.GREEN_700
-            self.app.page.update()
-
-        # 虚拟摇杆布局：采用经典的左右双十字盘设计
-        # 左摇杆：控制高度(上/下)与偏航角(左转/右转)
-        left_joystick = ft.Column([
-            ft.Text("高度 / 转向 (左摇杆)", size=12, color=ft.Colors.GREY_500, weight="bold"),
-            ft.IconButton(icon=ft.Icons.ARROW_DROP_UP, on_click=lambda _: send_cmd("throttle_up"), icon_size=32),
-            ft.Row([
-                ft.IconButton(icon=ft.Icons.ARROW_LEFT, on_click=lambda _: send_cmd("yaw_left"), icon_size=32),
-                ft.Container(width=32, height=32, bgcolor=ft.Colors.BLUE_GREY_100, border_radius=16), # 中心锚点
-                ft.IconButton(icon=ft.Icons.ARROW_RIGHT, on_click=lambda _: send_cmd("yaw_right"), icon_size=32),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
-            ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN, on_click=lambda _: send_cmd("throttle_down"), icon_size=32),
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
-
-        # 右摇杆：控制俯仰(前进/后退)与翻滚(左移/右移)
-        right_joystick = ft.Column([
-            ft.Text("前后 / 左右 (右摇杆)", size=12, color=ft.Colors.GREY_500, weight="bold"),
-            ft.IconButton(icon=ft.Icons.ARROW_DROP_UP, on_click=lambda _: send_cmd("pitch_forward"), icon_size=32),
-            ft.Row([
-                ft.IconButton(icon=ft.Icons.ARROW_LEFT, on_click=lambda _: send_cmd("roll_left"), icon_size=32),
-                ft.Container(width=32, height=32, bgcolor=ft.Colors.BLUE_GREY_100, border_radius=16), # 中心锚点
-                ft.IconButton(icon=ft.Icons.ARROW_RIGHT, on_click=lambda _: send_cmd("roll_right"), icon_size=32),
-            ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
-            ft.IconButton(icon=ft.Icons.ARROW_DROP_DOWN, on_click=lambda _: send_cmd("pitch_backward"), icon_size=32),
-        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0)
-
-        return ft.Column([
-            # 顶部导航及功能键
-            ft.Container(
-                content=ft.Row([
-                    ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=lambda _: self.goto("home")),
-                    ft.Text("AirSim 智能飞行控制舱", size=18, weight="bold", expand=True),
-                    ft.ElevatedButton("一键起飞", icon=ft.Icons.FLIGHT_TAKEOFF, on_click=toggle_power, bgcolor=ft.Colors.GREEN, color=ft.Colors.WHITE)
-                ]),
-                padding=ft.Padding(10, 15, 10, 10),
-                bgcolor=ft.Colors.WHITE,
-            ),
-            
-            # 核心区 1：AirSim 实时高清图传画面
+        cam_area = ft.Stack([
+            img_view,
             ft.Container(
                 content=ft.Column([
-                    img_stream,
-                    ft.Container(content=status_text, padding=ft.Padding(10, 5, 10, 5))
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.Alignment.CENTER,
-                padding=10
+                    ft.Row([make_hud(hud_stat)]),
+                    ft.Row([make_hud(hud_alt), make_hud(fps_text)], spacing=6),
+                ], spacing=4),
+                alignment=ft.Alignment(-1, 1),
+                padding=ft.Padding(8, 0, 0, 8),
             ),
-            
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            
-            # 核心区 2：模拟双手手柄的虚拟摇杆区
-            ft.Container(
-                content=ft.Row([
-                    left_joystick,
-                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_200),
-                    right_joystick
-                ], alignment=ft.MainAxisAlignment.SPACE_EVENLY, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                expand=True,
-                padding=10,
-                bgcolor=ft.Colors.WHITE
+        ], expand=True)
+
+        # ── 图传异步循环 ──────────────────────────────────────────────────────
+        async def camera_loop():
+            loop = asyncio.get_event_loop()
+            await asyncio.sleep(0.0166)
+
+            while flags["cam_on"]:
+                t0 = time.perf_counter()
+                try:
+                    raw = await loop.run_in_executor(
+                        None, lambda: frame_queue.get(timeout=1)
+                    )
+                    img_view.src = f"data:image/png;base64,{base64.b64encode(raw).decode()}"
+                    img_view.update()
+
+                    elapsed = time.perf_counter() - t0
+                    fps_text.value = f"FPS: {1/elapsed:.1f}"
+                    fps_text.update()
+
+                    hud_stat.value = "● 实时画面"
+                    hud_stat.update()
+
+                    # 遥测
+                    s = self.app.drone_controller.get_state()
+                    hud_alt.value = f"ALT {s['alt']:.1f} m"
+                    hud_alt.update()
+
+                except Exception:
+                    await asyncio.sleep(0.0166)
+
+        # ── 控制指令循环 ──────────────────────────────────────────────────────
+        async def control_loop():
+            loop   = asyncio.get_event_loop()
+            client = self.app.drone_controller.client
+
+            while flags["flying"]:
+                try:
+                    if ctrl["yaw"] != 0.0:
+                        await loop.run_in_executor(
+                            None,
+                            lambda: client.rotateByYawRateAsync(ctrl["yaw"], 0.15),
+                        )
+                    else:
+                        vx, vy, vz = ctrl["vx"], ctrl["vy"], ctrl["vz"]
+                        await loop.run_in_executor(
+                            None,
+                            lambda: client.moveByVelocityBodyFrameAsync(vx, vy, vz, duration=0.2),
+                        )
+                except Exception:
+                    pass
+                await asyncio.sleep(0.1)
+
+        # ── 起飞/降落 ─────────────────────────────────────────────────────────
+        fly_btn = ft.Button(
+            "一键起飞",
+            icon=ft.Icons.FLIGHT_TAKEOFF,
+            bgcolor=ft.Colors.GREEN_700,
+            color=ft.Colors.WHITE,
+            height=40,
+        )
+
+        async def toggle_flight(_):
+            loop   = asyncio.get_event_loop()
+            client = self.app.drone_controller.client
+
+            if not flags["flying"]:
+                try:
+                    await loop.run_in_executor(None, lambda: client.enableApiControl(True))
+                    await loop.run_in_executor(None, lambda: client.armDisarm(True))
+                    await loop.run_in_executor(None, lambda: client.takeoffAsync(timeout_sec=15).result())
+                    flags["flying"]  = True
+                    fly_btn.content  = "紧急降落"
+                    fly_btn.icon     = ft.Icons.FLIGHT_LAND
+                    fly_btn.bgcolor  = ft.Colors.RED_700
+                    fly_btn.update()
+                    self.app.page.run_task(control_loop)
+                except Exception as e:
+                    self.show_snackbar(f"起飞失败：{e}", ft.Colors.RED_400)
+            else:
+                flags["flying"] = False
+                ctrl.update({"vx": 0, "vy": 0, "vz": 0, "yaw": 0})
+                fly_btn.content = "一键起飞"
+                fly_btn.icon    = ft.Icons.FLIGHT_TAKEOFF
+                fly_btn.bgcolor = ft.Colors.GREEN_700
+                fly_btn.update()
+                try:
+                    await loop.run_in_executor(None, lambda: client.landAsync().result())
+                except Exception:
+                    pass
+
+        fly_btn.on_click = toggle_flight
+
+        # ── 摇杆按钮工厂 ──────────────────────────────────────────────────────
+        def joy_btn(icon, axis, value, size=52):
+            def on_down(_): ctrl[axis] = value
+            def on_up(_):   ctrl[axis] = 0.0
+
+            return ft.GestureDetector(
+                content=ft.Container(
+                    content=ft.Icon(icon, size=22, color=ft.Colors.WHITE),
+                    width=size, height=size,
+                    bgcolor=ft.Colors.BLUE_GREY_700,
+                    border_radius=size // 2,
+                    alignment=ft.Alignment(0, 0),
+                    shadow=ft.BoxShadow(
+                        blur_radius=8,
+                        color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+                    ),
+                ),
+                on_tap_down=on_down,
+                on_tap_up=on_up,
+                on_pan_end=on_up,
             )
+
+        def cross_pad(top_icon, top_axis, top_val,
+                    bot_icon, bot_axis, bot_val,
+                    lft_icon, lft_axis, lft_val,
+                    rgt_icon, rgt_axis, rgt_val,
+                    label: str):
+            return ft.Column([
+                ft.Text(label, size=10, color=ft.Colors.GREY_400,
+                        text_align=ft.TextAlign.CENTER),
+                joy_btn(top_icon, top_axis, top_val),
+                ft.Row([
+                    joy_btn(lft_icon, lft_axis, lft_val),
+                    ft.Container(width=14, height=14,
+                                bgcolor=ft.Colors.BLUE_GREY_400,
+                                border_radius=7),
+                    joy_btn(rgt_icon, rgt_axis, rgt_val),
+                ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+                joy_btn(bot_icon, bot_axis, bot_val),
+            ], 
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER, 
+            spacing=6,
+            alignment=ft.MainAxisAlignment.END # 👈 关键：强制让 Column 内部的所有按钮和文字沉到最底部
+            )
+
+        left_pad = cross_pad(
+            ft.Icons.KEYBOARD_ARROW_UP,    "vz", -VSPD,
+            ft.Icons.KEYBOARD_ARROW_DOWN,  "vz",  VSPD,
+            ft.Icons.ROTATE_LEFT,          "yaw", -YAW_SPD,
+            ft.Icons.ROTATE_RIGHT,         "yaw",  YAW_SPD,
+            "油门 / 偏航",
+        )
+
+        right_pad = cross_pad(
+            ft.Icons.KEYBOARD_ARROW_UP,    "vx",  HSPD,
+            ft.Icons.KEYBOARD_ARROW_DOWN,  "vx", -HSPD,
+            ft.Icons.KEYBOARD_ARROW_LEFT,  "vy", -HSPD,
+            ft.Icons.KEYBOARD_ARROW_RIGHT, "vy",  HSPD,
+            "前后 / 左右",
+        )
+
+        # ── 退出 ─────────────────────────────────────────────────────────────
+        def on_back(_):
+            flags["cam_on"] = False
+            flags["flying"] = False
+            self.app.page.navigation_bar.visible = True
+            self.app.page.orientation = "portrait"
+            self.app.page.update()
+            self.goto("home")
+
+        # 启动图传循环
+        self.app.page.run_task(camera_loop)
+
+        # ── 布局（横屏：左摇杆 | 画面+顶栏 | 右摇杆）────────────────────────
+        return ft.Row([
+            # 左摇杆（优化：移至左下角，并针对左手大拇指习惯做了内边距优化）
+            ft.Container(
+                content=left_pad,
+                width=130,  # 稍微加宽一点，给摇杆按钮留出横向腾挪空间
+                alignment=ft.Alignment(-0.5, 0.8),  # 关键：X轴稍微靠左，Y轴靠底部
+                bgcolor=ft.Colors.WHITE,
+                padding=ft.Padding(10, 0, 0, 20),  # 关键：底部留出 20 像素，防止太贴手机底边
+            ),
+
+            # 中间
+            ft.Column([
+                ft.Container(
+                    content=ft.Row([
+                        ft.IconButton(icon=ft.Icons.ARROW_BACK, on_click=on_back),
+                        ft.Text("自驾模式", size=15, weight="bold", expand=True),
+                        fly_btn,
+                    ], spacing=8),
+                    bgcolor=ft.Colors.WHITE,
+                    padding=ft.Padding(5, 8, 10, 8),
+                ),
+                ft.Container(
+                    content=cam_area,
+                    expand=True,
+                    bgcolor=ft.Colors.BLACK,
+                    border_radius=8,
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                ),
+            ], expand=True, spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH),
+
+            # 右摇杆（优化：移至右下角，并针对右手大拇指习惯做了内边距优化）
+            ft.Container(
+                content=right_pad,
+                width=130,  # 稍微加宽一点
+                alignment=ft.Alignment(0.5, 0.8),  # 关键：X轴稍微靠右，Y轴靠底部
+                bgcolor=ft.Colors.WHITE,
+                padding=ft.Padding(0, 0, 10, 20),  # 关键：右边和底部留出空隙，符合人体工学
+            ),
         ], expand=True, spacing=0)
 
     def build_card(self, drone_id, name, price, tag, specs):
@@ -3042,7 +3210,7 @@ class App:
         self.config = Config()
         self.user_manager = UserManager()
         self.drone_manager = DroneManager()
-        # self.drone_controller = DroneController()
+        self.drone_controller = DroneController()
         self.page = None
         self.view_builder = ViewBuilder(self)
 
