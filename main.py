@@ -2879,9 +2879,10 @@ class ViewBuilder:
                         bgcolor=ft.Colors.WHITE,
                         border_radius=12,
                         shadow=ft.BoxShadow(blur_radius=6, color=ft.Colors.BLACK_12),
+                        visible=is_booking
                     ),
 
-                    ft.Container(height=15),
+                    ft.Container(height=15, visible=is_booking),
 
                     # ========== 费用 ==========
                     ft.Container(
