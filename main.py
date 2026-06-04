@@ -112,7 +112,6 @@ class ViewBuilder:
     def build_play_rent(self):
         # 切换横屏
         self.app.page.navigation_bar.visible = False
-        self.app.page.orientation = "landscape"
         self.app.page.update()
 
         # ── 状态 ────────────────────────────────────────────────────────────
@@ -126,7 +125,7 @@ class ViewBuilder:
         def capture_loop():
             client = self.app.drone_controller.client
             while flags["cam_on"]:
-                raw = client.simGetImages([airsim.ImageRequest("0", airsim.ImageType.Scene, compress=True)])[0].image_data_uint8
+                raw = client.simGetImage("0", airsim.ImageType.Scene)
                 if raw:
                     if frame_queue.full():
                         try:
@@ -139,10 +138,11 @@ class ViewBuilder:
 
         # ── 控件 ─────────────────────────────────────────────────────────────
         img_view = ft.Image(
-            fit=ft.BoxFit.CONTAIN,
+            fit=ft.BoxFit.FILL,
             gapless_playback=True,
-            expand=True,
-            src="https://placehold.co/640x360/263238/90A4AE?text=画面加载中",
+            src="https://placehold.co/1920*1080/263238/90A4AE?text=画面加载中",
+            height=1080,
+            width=1920
         )
 
         fps_text  = ft.Text("FPS: --", color=ft.Colors.GREEN,  size=11)
@@ -3365,4 +3365,4 @@ class App:
 # 启动应用
 if __name__ == "__main__":
     app = App()
-    ft.run(app)
+    ft.run(app, view=ft.AppView.WEB_BROWSER)
