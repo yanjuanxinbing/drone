@@ -1,446 +1,434 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-
+    
     <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
     <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script
-        src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" />
-    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css" />
-    <link rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css" />
-    <link rel="stylesheet"
-        href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css" />
-
-    <meta name="viewport" content="width=device-width,
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
                 initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <style>
-        #map_9fdb8eb9d022d65fa3c682dd76034844 {
-            position: relative;
-            width: 100.0%;
-            height: 100.0%;
-            left: 0.0%;
-            top: 0.0%;
-        }
+            <style>
+                #map_0290fae98b2f56dd8e4e99d961f27b75 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
 
-        .leaflet-container {
-            font-size: 1rem;
-        }
-    </style>
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
 
-    <style>
-        html,
-        body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-    </style>
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
 
-    <style>
-        #map {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            right: 0;
-            left: 0;
-        }
-    </style>
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
 
-    <script>
-        L_NO_TOUCH = false;
-        L_DISABLE_3D = false;
-    </script>
-
-
+        
 </head>
-
 <body>
-
-
-    <div class="folium-map" id="map_9fdb8eb9d022d65fa3c682dd76034844"></div>
-
+    
+    
+            <div class="folium-map" id="map_0290fae98b2f56dd8e4e99d961f27b75" ></div>
+        
 </body>
 <script>
+    
+    
+            var map_0290fae98b2f56dd8e4e99d961f27b75 = L.map(
+                "map_0290fae98b2f56dd8e4e99d961f27b75",
+                {
+                    center: [28.164329, 112.93232],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 12,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
 
+                }
+            );
 
-    var map_9fdb8eb9d022d65fa3c682dd76034844 = L.map(
-        "map_9fdb8eb9d022d65fa3c682dd76034844",
-        {
-            center: [28.150296, 112.941729],
-            crs: L.CRS.EPSG3857,
-            ...{
-                "zoom": 12,
-                "zoomControl": true,
-                "preferCanvas": false,
-            }
+            
 
-        }
-    );
+        
+    
+            var tile_layer_b9a971f1a66d5b2affbc0b564e06b3c4 = L.tileLayer(
+                "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn\u0026size=1\u0026scale=1\u0026style=8\u0026x={x}\u0026y={y}\u0026z={z}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "AutoNavi",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
 
+            );
+        
+    
+            tile_layer_b9a971f1a66d5b2affbc0b564e06b3c4.addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var marker_e49e09696eb141623cabb7094358cfae = L.marker(
+                [28.158683, 112.935477],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_415294b8e2ba04c435e6183398ab0340 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "home",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_7ed143c56d94d0ec728cfbf961c07153 = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_faec0851e5bfb4a461e0533af02f800f = $(`<div id="html_faec0851e5bfb4a461e0533af02f800f" style="width: 100.0%; height: 100.0%;">选定起点机库</div>`)[0];
+                popup_7ed143c56d94d0ec728cfbf961c07153.setContent(html_faec0851e5bfb4a461e0533af02f800f);
+            
+        
 
-
-
-    var tile_layer_40ebae37a7c88d4d27cf8f8bc286a822 = L.tileLayer(
-        "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn\u0026size=1\u0026scale=1\u0026style=8\u0026x={x}\u0026y={y}\u0026z={z}",
-        {
-            "minZoom": 0,
-            "maxZoom": 18,
-            "maxNativeZoom": 18,
-            "noWrap": false,
-            "attribution": "AutoNavi",
-            "subdomains": "abc",
-            "detectRetina": false,
-            "tms": false,
-            "opacity": 1,
-        }
-
-    );
-
-
-    tile_layer_40ebae37a7c88d4d27cf8f8bc286a822.addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var marker_017c590de2d867159bd4fefdf45da766 = L.marker(
-        [28.158683, 112.935477],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_260d146cf6adde16945054708fc9bce3 = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "green",
-            "iconColor": "white",
-            "icon": "home",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-        }
-    );
-
-
-    var popup_a89a293fbbd0b4c9a3dd6374e5d1b450 = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_2b956bc60295f62fc3a65391b795f3ff = $(`<div id="html_2b956bc60295f62fc3a65391b795f3ff" style="width: 100.0%; height: 100.0%;">选定起点机库</div>`)[0];
-    popup_a89a293fbbd0b4c9a3dd6374e5d1b450.setContent(html_2b956bc60295f62fc3a65391b795f3ff);
-
-
-
-    marker_017c590de2d867159bd4fefdf45da766.bindPopup(popup_a89a293fbbd0b4c9a3dd6374e5d1b450)
+        marker_e49e09696eb141623cabb7094358cfae.bindPopup(popup_7ed143c56d94d0ec728cfbf961c07153)
         ;
 
+        
+    
+    
+                marker_e49e09696eb141623cabb7094358cfae.setIcon(icon_415294b8e2ba04c435e6183398ab0340);
+            
+    
+            var marker_2952e9733f611a9037b3de3377118158 = L.marker(
+                [28.162727186151248, 112.93179176701715],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_d17a50d3b21accaa115d03660680eb82 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "flag",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_485407334150eb80c655e583ce4ecb2d = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_294690e22ae44d62b1bd502472ce37ca = $(`<div id="html_294690e22ae44d62b1bd502472ce37ca" style="width: 100.0%; height: 100.0%;">选定终点机库</div>`)[0];
+                popup_485407334150eb80c655e583ce4ecb2d.setContent(html_294690e22ae44d62b1bd502472ce37ca);
+            
+        
 
-
-    marker_017c590de2d867159bd4fefdf45da766.setIcon(icon_260d146cf6adde16945054708fc9bce3);
-
-
-    var marker_d748cb0c3882817943db6cb8771390fc = L.marker(
-        [28.162727186151248, 112.93179176701715],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_71e94f268e97612f75050c2ae24f9b61 = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "red",
-            "iconColor": "white",
-            "icon": "flag",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-        }
-    );
-
-
-    var popup_2f99f1f38c1508e2971abfbf6f49be08 = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_a9c37e6f36ee3004f2f441d873e09880 = $(`<div id="html_a9c37e6f36ee3004f2f441d873e09880" style="width: 100.0%; height: 100.0%;">选定终点机库</div>`)[0];
-    popup_2f99f1f38c1508e2971abfbf6f49be08.setContent(html_a9c37e6f36ee3004f2f441d873e09880);
-
-
-
-    marker_d748cb0c3882817943db6cb8771390fc.bindPopup(popup_2f99f1f38c1508e2971abfbf6f49be08)
+        marker_2952e9733f611a9037b3de3377118158.bindPopup(popup_485407334150eb80c655e583ce4ecb2d)
         ;
 
+        
+    
+    
+                marker_2952e9733f611a9037b3de3377118158.setIcon(icon_d17a50d3b21accaa115d03660680eb82);
+            
+    
+            var marker_cc0ff422d9d3575be700185fd914f424 = L.marker(
+                [28.197838178991322, 112.93394799785588],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_c38a0f124a31cc2ac56394e02cc68289 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "gray",
+  "iconColor": "white",
+  "icon": "home",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+  "opacity": 0.5,
+}
+            );
+        
+    
+        var popup_c195cf81671d8523c9b99cd176fb8293 = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_d3be52f742a417185cbcb39077941666 = $(`<div id="html_d3be52f742a417185cbcb39077941666" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
+                popup_c195cf81671d8523c9b99cd176fb8293.setContent(html_d3be52f742a417185cbcb39077941666);
+            
+        
 
-
-    marker_d748cb0c3882817943db6cb8771390fc.setIcon(icon_71e94f268e97612f75050c2ae24f9b61);
-
-
-    var marker_5aece7b74a3fd04ca34293e995f2e808 = L.marker(
-        [28.197838178991322, 112.93394799785588],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_5cbc963e1226a0b83ab603443f905d0a = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "gray",
-            "iconColor": "white",
-            "icon": "home",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-            "opacity": 0.5,
-        }
-    );
-
-
-    var popup_6f17d69dec54388e3dd5e048b103f641 = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_bdd1146c653c9a46c89af0d3f9bc92ee = $(`<div id="html_bdd1146c653c9a46c89af0d3f9bc92ee" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
-    popup_6f17d69dec54388e3dd5e048b103f641.setContent(html_bdd1146c653c9a46c89af0d3f9bc92ee);
-
-
-
-    marker_5aece7b74a3fd04ca34293e995f2e808.bindPopup(popup_6f17d69dec54388e3dd5e048b103f641)
+        marker_cc0ff422d9d3575be700185fd914f424.bindPopup(popup_c195cf81671d8523c9b99cd176fb8293)
         ;
 
+        
+    
+    
+                marker_cc0ff422d9d3575be700185fd914f424.setIcon(icon_c38a0f124a31cc2ac56394e02cc68289);
+            
+    
+            var marker_4ee44d28a68a7584cc29c7b4ff2a6440 = L.marker(
+                [28.070362744025946, 113.00032241871332],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_b0ed745af04d18548915ddaef9cc2d74 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "gray",
+  "iconColor": "white",
+  "icon": "home",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+  "opacity": 0.5,
+}
+            );
+        
+    
+        var popup_53f502051d107298881319eac8caa437 = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_e8dc1ea44394b65a963a93ab2bbaf6de = $(`<div id="html_e8dc1ea44394b65a963a93ab2bbaf6de" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
+                popup_53f502051d107298881319eac8caa437.setContent(html_e8dc1ea44394b65a963a93ab2bbaf6de);
+            
+        
 
-
-    marker_5aece7b74a3fd04ca34293e995f2e808.setIcon(icon_5cbc963e1226a0b83ab603443f905d0a);
-
-
-    var marker_55488ee87a4b9613ded0a0b69ac60586 = L.marker(
-        [28.070362744025946, 113.00032241871332],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_5238f56025c2c23f1aff49de5508a2dd = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "gray",
-            "iconColor": "white",
-            "icon": "home",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-            "opacity": 0.5,
-        }
-    );
-
-
-    var popup_aa93b1e25107a21f279867fd06567eaa = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_591c00638c79804da98b2741344d50e1 = $(`<div id="html_591c00638c79804da98b2741344d50e1" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
-    popup_aa93b1e25107a21f279867fd06567eaa.setContent(html_591c00638c79804da98b2741344d50e1);
-
-
-
-    marker_55488ee87a4b9613ded0a0b69ac60586.bindPopup(popup_aa93b1e25107a21f279867fd06567eaa)
+        marker_4ee44d28a68a7584cc29c7b4ff2a6440.bindPopup(popup_53f502051d107298881319eac8caa437)
         ;
 
+        
+    
+    
+                marker_4ee44d28a68a7584cc29c7b4ff2a6440.setIcon(icon_b0ed745af04d18548915ddaef9cc2d74);
+            
+    
+            var marker_a4ba5bfd143143df28b00f9484672b98 = L.marker(
+                [28.372755526429163, 112.9018843955385],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_b738ea43dcf8c03f759ba4ea8e18c5cd = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "gray",
+  "iconColor": "white",
+  "icon": "home",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+  "opacity": 0.5,
+}
+            );
+        
+    
+        var popup_5751772ef6c33d04cba4106609e6f46a = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_b9c3d59b17a41cd5ef32dc62feac926b = $(`<div id="html_b9c3d59b17a41cd5ef32dc62feac926b" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
+                popup_5751772ef6c33d04cba4106609e6f46a.setContent(html_b9c3d59b17a41cd5ef32dc62feac926b);
+            
+        
 
-
-    marker_55488ee87a4b9613ded0a0b69ac60586.setIcon(icon_5238f56025c2c23f1aff49de5508a2dd);
-
-
-    var marker_b0df97a9d0a30302f32c9afe028f5e2c = L.marker(
-        [28.372755526429163, 112.9018843955385],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_768cc4247396d28d1106f66c88456189 = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "gray",
-            "iconColor": "white",
-            "icon": "home",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-            "opacity": 0.5,
-        }
-    );
-
-
-    var popup_b645e7bcbba063c25b97493e7815696d = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_a863140348f3ce7b9afadde5029f5538 = $(`<div id="html_a863140348f3ce7b9afadde5029f5538" style="width: 100.0%; height: 100.0%;">备选机库(未启用)</div>`)[0];
-    popup_b645e7bcbba063c25b97493e7815696d.setContent(html_a863140348f3ce7b9afadde5029f5538);
-
-
-
-    marker_b0df97a9d0a30302f32c9afe028f5e2c.bindPopup(popup_b645e7bcbba063c25b97493e7815696d)
+        marker_a4ba5bfd143143df28b00f9484672b98.bindPopup(popup_5751772ef6c33d04cba4106609e6f46a)
         ;
 
+        
+    
+    
+                marker_a4ba5bfd143143df28b00f9484672b98.setIcon(icon_b738ea43dcf8c03f759ba4ea8e18c5cd);
+            
+    
+            var marker_2d7f6b5f33a242486d3a193bd9b7026c = L.marker(
+                [28.164329, 112.93232],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_bb298d526d610d223a3cf05c69e84cf3 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "blue",
+  "iconColor": "white",
+  "icon": "shopping-cart",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_9811c03021804ee27e788ab65deb6b98 = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_73d9fdfc372ec1ff98f7a32116fce007 = $(`<div id="html_73d9fdfc372ec1ff98f7a32116fce007" style="width: 100.0%; height: 100.0%;">装货点</div>`)[0];
+                popup_9811c03021804ee27e788ab65deb6b98.setContent(html_73d9fdfc372ec1ff98f7a32116fce007);
+            
+        
 
-
-    marker_b0df97a9d0a30302f32c9afe028f5e2c.setIcon(icon_768cc4247396d28d1106f66c88456189);
-
-
-    var marker_6a21d4764bb412fd73200fbfbb6397a7 = L.marker(
-        [28.150296, 112.941729],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_c7281c073675001eeeaef6acc550c56a = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "blue",
-            "iconColor": "white",
-            "icon": "shopping-cart",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-        }
-    );
-
-
-    var popup_37b54280dec8a7d6d3b35dd34398a4b9 = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_fda4a44bb12ee48df208d5cd3f67b458 = $(`<div id="html_fda4a44bb12ee48df208d5cd3f67b458" style="width: 100.0%; height: 100.0%;">装货点</div>`)[0];
-    popup_37b54280dec8a7d6d3b35dd34398a4b9.setContent(html_fda4a44bb12ee48df208d5cd3f67b458);
-
-
-
-    marker_6a21d4764bb412fd73200fbfbb6397a7.bindPopup(popup_37b54280dec8a7d6d3b35dd34398a4b9)
+        marker_2d7f6b5f33a242486d3a193bd9b7026c.bindPopup(popup_9811c03021804ee27e788ab65deb6b98)
         ;
 
+        
+    
+    
+                marker_2d7f6b5f33a242486d3a193bd9b7026c.setIcon(icon_bb298d526d610d223a3cf05c69e84cf3);
+            
+    
+            var marker_dbe29ec26b01c951b7cf8e95aed1a2e3 = L.marker(
+                [28.158683, 112.935477],
+                {
+}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            var icon_8f4c8532f4d1577b942ba6061afd0298 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "orange",
+  "iconColor": "white",
+  "icon": "log-out",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_b25d2e204d1b84e2d9d9b5d0b84ab878 = L.popup({
+  "maxWidth": "100%",
+});
 
+        
+            
+                var html_110f0874718b20cb97f87d0c19ebbbf2 = $(`<div id="html_110f0874718b20cb97f87d0c19ebbbf2" style="width: 100.0%; height: 100.0%;">卸货点</div>`)[0];
+                popup_b25d2e204d1b84e2d9d9b5d0b84ab878.setContent(html_110f0874718b20cb97f87d0c19ebbbf2);
+            
+        
 
-
-    marker_6a21d4764bb412fd73200fbfbb6397a7.setIcon(icon_c7281c073675001eeeaef6acc550c56a);
-
-
-    var marker_108705029ec555daa80786f35b0fc468 = L.marker(
-        [28.164329, 112.93232],
-        {
-        }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    var icon_3590637dc07069c7be77a91fa6963624 = L.AwesomeMarkers.icon(
-        {
-            "markerColor": "orange",
-            "iconColor": "white",
-            "icon": "log-out",
-            "prefix": "glyphicon",
-            "extraClasses": "fa-rotate-0",
-        }
-    );
-
-
-    var popup_c60ed5d1f05b66858649384afb7c649a = L.popup({
-        "maxWidth": "100%",
-    });
-
-
-
-    var html_4fee33707083812345b4463f18a4f60b = $(`<div id="html_4fee33707083812345b4463f18a4f60b" style="width: 100.0%; height: 100.0%;">卸货点</div>`)[0];
-    popup_c60ed5d1f05b66858649384afb7c649a.setContent(html_4fee33707083812345b4463f18a4f60b);
-
-
-
-    marker_108705029ec555daa80786f35b0fc468.bindPopup(popup_c60ed5d1f05b66858649384afb7c649a)
+        marker_dbe29ec26b01c951b7cf8e95aed1a2e3.bindPopup(popup_b25d2e204d1b84e2d9d9b5d0b84ab878)
         ;
 
-
-
-
-    marker_108705029ec555daa80786f35b0fc468.setIcon(icon_3590637dc07069c7be77a91fa6963624);
-
-
-    var circle_49f04a1e7fc65e11703063561d53c062 = L.circle(
-        [28.115993549167808, 112.98302800914297],
-        { "bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "red", "fillOpacity": 0.25, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 500, "stroke": true, "weight": 3 }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    circle_49f04a1e7fc65e11703063561d53c062.bindTooltip(
-        `<div>
+        
+    
+    
+                marker_dbe29ec26b01c951b7cf8e95aed1a2e3.setIcon(icon_8f4c8532f4d1577b942ba6061afd0298);
+            
+    
+            var circle_3531224e4ab6a1851e4303efd56f6c08 = L.circle(
+                [28.115993549167808, 112.98302800914297],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "red", "fillOpacity": 0.25, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 500, "stroke": true, "weight": 3}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            circle_3531224e4ab6a1851e4303efd56f6c08.bindTooltip(
+                `<div>
                      无人机管控区域
                  </div>`,
-        {
-            "sticky": true,
-        }
-    );
-
-
-    var poly_line_5a04f8ee30e155fba2cdcecd34d5f38f = L.polyline(
-        [[28.158683, 112.935477], [28.158, 112.936], [28.1575, 112.9365], [28.157, 112.937], [28.1565, 112.9375], [28.156, 112.938], [28.1555, 112.9385], [28.155, 112.939], [28.1545, 112.9395], [28.154, 112.94], [28.1535, 112.9405], [28.153, 112.941], [28.1525, 112.9415], [28.152, 112.9415], [28.1515, 112.9415], [28.151, 112.9415], [28.1505, 112.9415], [28.150296, 112.941729]],
-        { "bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4 }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    poly_line_5a04f8ee30e155fba2cdcecd34d5f38f.bindTooltip(
-        `<div>
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f517458879b222c707becfb4ff0dd2b4 = L.polyline(
+                [[28.158683, 112.935477], [28.159, 112.9355], [28.1595, 112.9355], [28.16, 112.9355], [28.1605, 112.9355], [28.161, 112.9355], [28.1615, 112.9355], [28.162, 112.935], [28.1625, 112.9345], [28.163, 112.934], [28.1635, 112.9335], [28.164, 112.933], [28.1645, 112.9325], [28.164329, 112.93232]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            poly_line_f517458879b222c707becfb4ff0dd2b4.bindTooltip(
+                `<div>
                      无人机规划航线1
                  </div>`,
-        {
-            "sticky": true,
-        }
-    );
-
-
-    var poly_line_b6a3c7b39bea2f3c199350ff9c861076 = L.polyline(
-        [[28.151, 112.9415], [28.1515, 112.9415], [28.152, 112.9415], [28.1525, 112.9415], [28.153, 112.9415], [28.1535, 112.9415], [28.154, 112.9415], [28.1545, 112.9415], [28.155, 112.9415], [28.1555, 112.9415], [28.156, 112.941], [28.1565, 112.9405], [28.157, 112.94], [28.1575, 112.9395], [28.158, 112.939], [28.1585, 112.9385], [28.159, 112.938], [28.1595, 112.9375], [28.16, 112.937], [28.1605, 112.9365], [28.161, 112.936], [28.1615, 112.9355], [28.162, 112.935], [28.1625, 112.9345], [28.163, 112.934], [28.1635, 112.9335], [28.164, 112.933], [28.1645, 112.9325], [28.164329, 112.93232]],
-        { "bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4 }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    poly_line_b6a3c7b39bea2f3c199350ff9c861076.bindTooltip(
-        `<div>
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_b3d2c441def1d371b247a09330c3b144 = L.polyline(
+                [[28.164, 112.933], [28.1635, 112.9335], [28.163, 112.934], [28.1625, 112.9345], [28.162, 112.935], [28.1615, 112.9355], [28.161, 112.9355], [28.1605, 112.9355], [28.16, 112.9355], [28.1595, 112.9355], [28.159, 112.9355], [28.1585, 112.9355], [28.158683, 112.935477]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            poly_line_b3d2c441def1d371b247a09330c3b144.bindTooltip(
+                `<div>
                      无人机规划航线2
                  </div>`,
-        {
-            "sticky": true,
-        }
-    );
-
-
-    var poly_line_5e67632fbc8c87fb383c4c1e000b7374 = L.polyline(
-        [[28.164, 112.932], [28.1635, 112.932], [28.163, 112.932], [28.1625, 112.932], [28.162727186151248, 112.93179176701715]],
-        { "bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4 }
-    ).addTo(map_9fdb8eb9d022d65fa3c682dd76034844);
-
-
-    poly_line_5e67632fbc8c87fb383c4c1e000b7374.bindTooltip(
-        `<div>
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_190bf8a3a9af5b8480f7f2832e93d059 = L.polyline(
+                [[28.159, 112.9355], [28.1595, 112.935], [28.16, 112.9345], [28.1605, 112.934], [28.161, 112.9335], [28.1615, 112.933], [28.162, 112.9325], [28.1625, 112.932], [28.162727186151248, 112.93179176701715]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.85, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_0290fae98b2f56dd8e4e99d961f27b75);
+        
+    
+            poly_line_190bf8a3a9af5b8480f7f2832e93d059.bindTooltip(
+                `<div>
                      无人机规划航线3
                  </div>`,
-        {
-            "sticky": true,
-        }
-    );
-
+                {
+  "sticky": true,
+}
+            );
+        
 </script>
-
 </html>

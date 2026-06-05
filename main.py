@@ -1,15 +1,16 @@
 import re
+import cv2
 import sys
 import time
 import queue
-import base64
-import aiohttp
 import airsim
+import aiohttp
 import asyncio
 import keyvals
 import datetime
 import threading
 import flet as ft
+import numpy as np
 import flet_map as ftm
 from config import Config
 import flet_geolocator as ftg
@@ -127,10 +128,17 @@ class ViewBuilder:
             while flags["cam_on"]:
                 raw = client.simGetImage("0", airsim.ImageType.Scene)
                 if raw:
+                    # 解码 → 缩放 → 重新编码
+                    arr = np.frombuffer(raw, np.uint8)
+                    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    img = cv2.resize(img, (1920, 1080), interpolation=cv2.INTER_LINEAR)
+                    _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])
+                    raw = buf.tobytes()
+
                     if frame_queue.full():
                         try:
                             frame_queue.get_nowait()
-                        except queue.Empty:
+                        except:
                             pass
                     frame_queue.put(raw)
 
@@ -145,24 +153,19 @@ class ViewBuilder:
             width=1920
         )
 
-        fps_text  = ft.Text("FPS: --", color=ft.Colors.GREEN,  size=11)
-        hud_stat  = ft.Text("● 连接中", color=ft.Colors.WHITE,  size=11)
-        hud_alt   = ft.Text("ALT --- m", color=ft.Colors.WHITE, size=11)
-
-        def make_hud(ctrl):
-            return ft.Container(
-                content=ctrl,
-                padding=ft.Padding(6, 2, 6, 2),
-                bgcolor=ft.Colors.with_opacity(0.55, ft.Colors.BLACK),
-                border_radius=4,
-            )
+        fps_text = ft.Text("FPS: --", color=ft.Colors.GREEN,  size=11)
 
         cam_area = ft.Stack([
             img_view,
             ft.Container(
                 content=ft.Column([
-                    ft.Row([make_hud(hud_stat)]),
-                    ft.Row([make_hud(hud_alt), make_hud(fps_text)], spacing=6),
+                    ft.Row([
+                        ft.Container(
+                            content=fps_text,
+                            padding=ft.Padding(6, 2, 6, 2),
+                            bgcolor=ft.Colors.with_opacity(0.55, ft.Colors.BLACK),
+                            border_radius=4,
+                            )])
                 ], spacing=4),
                 alignment=ft.Alignment(-1, 1),
                 padding=ft.Padding(8, 0, 0, 8),
@@ -172,31 +175,26 @@ class ViewBuilder:
         # ── 图传异步循环 ──────────────────────────────────────────────────────
         async def camera_loop():
             loop = asyncio.get_event_loop()
-            await asyncio.sleep(0.0166)
+            last_time = time.perf_counter()
 
             while flags["cam_on"]:
-                t0 = time.perf_counter()
                 try:
                     raw = await loop.run_in_executor(
-                        None, lambda: frame_queue.get(timeout=1)
+                        None, lambda: frame_queue.get()
                     )
-                    img_view.src = f"data:image/png;base64,{base64.b64encode(raw).decode()}"
+                    img_view.src = raw
                     img_view.update()
 
-                    elapsed = time.perf_counter() - t0
-                    fps_text.value = f"FPS: {1/elapsed:.1f}"
-                    fps_text.update()
+                    current_time = time.perf_counter()
+                    elapsed = current_time - last_time
+                    last_time = current_time
 
-                    hud_stat.value = "● 实时画面"
-                    hud_stat.update()
+                    if elapsed > 0:
+                        fps_text.value = f"FPS: {1/elapsed:.1f}"
+                        fps_text.update()
 
-                    # 遥测
-                    s = self.app.drone_controller.get_state()
-                    hud_alt.value = f"ALT {s['alt']:.1f} m"
-                    hud_alt.update()
-
-                except Exception:
-                    await asyncio.sleep(0.0166)
+                except:
+                    pass
 
         # ── 控制指令循环 ──────────────────────────────────────────────────────
         async def control_loop():
@@ -3357,12 +3355,11 @@ class App:
                     self.drone_controller.create_task(order["start_location"], order["location"], on_task_finished)
                     self.user_manager.update_order_status(phone, order["id"], "租赁中")
 
-            await asyncio.sleep(30000)
+            await asyncio.sleep(10)
 
     def __call__(self, *args, **kwds):
         self.before_main(*args, **kwds)
 
-# 启动应用
 if __name__ == "__main__":
     app = App()
     ft.run(app, view=ft.AppView.WEB_BROWSER)
