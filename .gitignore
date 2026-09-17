@@ -11,3 +11,5 @@
 /dynamic_drone_route.html
 /db/img
 /db/data
+/views/__pycache__
+/views/pages/__pycache__
